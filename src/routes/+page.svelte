@@ -1,0 +1,76 @@
+<script lang="ts">
+    import AuthLayout from '$lib/components/auth/AuthLayout.svelte';
+    import { Button } from '$lib/components/ui/button';
+    import { Input } from '$lib/components/ui/input';
+    import { Label } from '$lib/components/ui/label';
+    import { Checkbox } from '$lib/components/ui/checkbox';
+    import { goto } from '$app/navigation'; // Keep goto for post-login redirect
+    import { login } from '$lib/api'; // Import login function
+
+    let email = '';
+    let password = '';
+    let rememberMe = false;
+    let errorMessage: string | null = null; // For displaying API errors
+
+    async function handleLogin() {
+        errorMessage = null; // Clear previous errors
+        try {
+            const response = await login({ email, password });
+            console.log('Login successful:', response);
+            goto('/dashboard'); // Redirect to dashboard on success
+        } catch (error: any) {
+            console.error('Login failed:', error.message);
+            errorMessage = error.message || 'Login failed. Please check your credentials.';
+        }
+    }
+</script>
+
+<AuthLayout title="Welcome Back" description="Sign in to your Connectify account">
+    <form on:submit|preventDefault={handleLogin} class="space-y-6">
+        {#if errorMessage}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                <span class="block sm:inline">{errorMessage}</span>
+            </div>
+        {/if}
+        <div>
+            <Label for="email" class="text-sm font-medium text-gray-700">Email</Label>
+            <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                bind:value={email}
+                required
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            />
+        </div>
+        <div>
+            <Label for="password" class="text-sm font-medium text-gray-700">Password</Label>
+            <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                bind:value={password}
+                required
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            />
+        </div>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <Checkbox id="remember-me" bind:checked={rememberMe} class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
+                <Label for="remember-me" class="ml-2 block text-sm text-gray-900">Remember me</Label>
+            </div>
+            <Button variant="link" href="/forgot-password" class="text-sm text-indigo-600 hover:text-indigo-500 p-0 h-auto">
+                Forgot password?
+            </Button>
+        </div>
+        <Button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Login
+        </Button>
+    </form>
+
+    <div slot="footer" class="text-center">
+        <Button variant="link" href="/register" class="text-sm text-gray-600 hover:text-gray-900 p-0 h-auto">
+            Don't have an account? Register
+        </Button>
+    </div>
+</AuthLayout>
