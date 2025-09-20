@@ -1,50 +1,55 @@
-# Connectify
+# Messaging App Frontend (SvelteKit)
 
-Connectify is a modern social media application built with SvelteKit. It provides a platform for users to connect with friends, share posts, and chat in real-time.
-
-## Features
-
-*   **Authentication:** Secure user registration and login.
-*   **Feed:** A central place to view posts from friends.
-*   **Friends System:** Manage friend requests and view your connections.
-*   **Real-time Messaging:** Chat with your friends instantly.
-*   **User Profiles:** View and customize your user profile.
+This directory contains the SvelteKit frontend application for the Messaging App. It provides the user interface for interacting with the backend API.
 
 ## Technologies Used
 
-*   **Framework:** [SvelteKit](https://kit.svelte.dev/)
-*   **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-*   **UI Components:** A combination of custom components and primitives from [shadcn-svelte](https://shadcn-svelte.com/).
-*   **Icons:** [Lucide Svelte](https://lucide.dev/guide/packages/lucide-svelte)
+*   **Framework:** SvelteKit
+*   **Styling:** Tailwind CSS
+*   **UI Components:** Custom components built with Tailwind CSS (and `bits-ui` for some primitives)
+*   **Icons:** Lucide Svelte
 
 ## Local Development
 
-To get started with local development:
+To run the frontend application locally, you should typically start the entire Messaging App stack using the root `Makefile`.
 
-1.  **Install dependencies:**
+1.  **Ensure Docker and Docker Compose are installed.**
+2.  **Navigate to the project root directory (`messaging-app/`).**
+3.  **Start all services (backend, database, Kafka, Redis, etc.):**
+    ```sh
+    make up
+    ```
+    This will also build and run the frontend development server.
+
+Alternatively, if you only need to run the frontend development server (assuming the backend is already running elsewhere):
+
+1.  **Navigate to this directory (`messaging-app/client/`).**
+2.  **Install dependencies:**
     ```sh
     pnpm install
     ```
-2.  **Start the development server:**
+    (or `npm install` or `yarn install` if you prefer)
+3.  **Start the development server:**
     ```sh
     pnpm run dev
     ```
-    The application will be accessible at `http://localhost:5173`.
+    The frontend will typically be accessible at `http://localhost:5173`.
 
 ## Building for Production
 
-To create a production-ready build of the application:
+To create a production-ready build of the frontend application:
 
-1.  **Build the application:**
+1.  **Navigate to this directory (`messaging-app/client/`).**
+2.  **Build the application:**
     ```sh
     pnpm run build
     ```
-    The build output will be in the `.svelte-kit/` directory.
+    The build output will be in the `build/` directory.
 
-2.  **Preview the production build:**
-    ```sh
-    pnpm run preview
-    ```
+You can preview the production build with:
+```sh
+pnpm run preview
+```
 
 ## Linting and Formatting
 
@@ -59,9 +64,4 @@ To create a production-ready build of the application:
 
 ## Project Structure
 
-*   `src/lib/`: Contains the core logic of the application, including API communication, UI components, and utility functions.
-    *   `src/lib/api.ts`: Functions for interacting with the backend API.
-    *   `src/lib/components/`: Reusable Svelte components.
-    *   `src/lib/utils.ts`: Utility functions.
-*   `src/routes/`: Defines the pages and API routes of the application. Each file and directory in this folder corresponds to a URL path.
-*   `static/`: Contains static assets like images and fonts.
+(Optional: Add a brief overview of the `src/` directory structure if it adds significant value beyond what's obvious from the file system.)

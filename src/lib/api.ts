@@ -3,6 +3,28 @@ import { browser } from '$app/environment';
 
 const API_BASE_URL = 'http://localhost:8080/api'; // Backend API URL
 
+// Define Notification type based on backend model
+export interface Notification {
+    id: string;
+    recipient_id: string;
+    sender_id: string;
+    type: string; // e.g., "MENTION", "LIKE"
+    target_id: string;
+    target_type: string; // e.g., "post", "comment"
+    content: string;
+    data?: Record<string, any>; // Structured data for the notification
+    read: boolean;
+    created_at: string; // ISO 8601 string
+    user_id?: string; // Optional, for events related to user actions
+}
+
+export interface NotificationListResponse {
+    notifications: Notification[];
+    total: number;
+    page: number;
+    limit: number;
+}
+
 // Svelte stores for authentication state
 export const accessToken = writable<string | null>(null);
 export const refreshToken = writable<string | null>(null);
@@ -186,4 +208,25 @@ export async function getCurrentUser() {
         clearAuth(); // If fetching user fails, assume auth is bad
         throw error;
     }
+}
+
+// Notification API functions
+export async function fetchNotifications(
+    page: number = 1,
+    limit: number = 10,
+    readStatus?: boolean
+): Promise<NotificationListResponse> {
+    let path = `/notifications?page=${page}&limit=${limit}`;
+    if (readStatus !== undefined) {
+        path += `&read=${readStatus}`;
+    }
+    return apiRequest('GET', path, undefined, true);
+}
+
+export async function markNotificationAsRead(notificationId: string): Promise<void> {
+    await apiRequest('PUT', `/notifications/${notificationId}/read`, undefined, true);
+}
+
+export async function getUnreadNotificationCount(): Promise<{ count: number }> {
+    return apiRequest('GET', '/notifications/unread', undefined, true);
 }

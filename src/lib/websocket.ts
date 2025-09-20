@@ -1,9 +1,11 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { addNotification } from './stores/notifications';
+import type { Notification } from './api';
 
-interface WebSocketEvent {
-    Type: string;
-    Data: any; // This will be the unmarshaled JSON data
+export interface WebSocketEvent {
+    type: string;
+    data: Notification; // This will be the unmarshaled JSON data, specifically a Notification
 }
 
 const websocketMessages = writable<WebSocketEvent | null>(null);
@@ -43,11 +45,16 @@ function connectWebSocket() {
     ws.onmessage = (event) => {
         try {
             const parsedData: WebSocketEvent = JSON.parse(event.data);
-            // Data field might be a JSON string itself, so parse it again if needed
-            if (typeof parsedData.Data === 'string') {
-                parsedData.Data = JSON.parse(parsedData.Data);
-            }
+            console.log('WebSocket message received:', parsedData);
+            // Assuming the backend sends the Notification object directly as event.data
+            // If the backend wraps it in a generic WebSocketEvent, you'd need to adjust.
+            // For now, we assume event.data IS the Notification.
+            addNotification(parsedData?.data);
+
+            // Also update the generic websocketMessages store if other types of messages are expected
+            // For now, we'll just pass the notification as a generic WebSocketEvent for other consumers
             websocketMessages.set(parsedData);
+
         } catch (e) {
             console.error('Failed to parse WebSocket message:', e, event.data);
         }
