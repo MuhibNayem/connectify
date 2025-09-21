@@ -1,18 +1,18 @@
 <script lang="ts">
-    import { apiRequest, currentUser } from '$lib/api'; // Import currentUser store
+    import { apiRequest } from '$lib/api';
+    import { auth } from '$lib/stores/auth.svelte';
     import { onMount } from 'svelte';
     import { Button } from '$lib/components/ui/button';
-    import { get } from 'svelte/store'; // To get value from store outside reactive context
+    import { presenceStore } from '$lib/stores/presence';
 
     interface FriendUser {
         id: string;
         username: string;
         avatar?: string;
-        // Add other user details as needed
     }
 
     interface Friendship {
-        id: string; // Friendship ID
+        id: string;
         requester_id: string;
         receiver_id: string;
         status: 'pending' | 'accepted' | 'rejected';
@@ -22,13 +22,7 @@
     let loading = true;
     let error: string | null = null;
 
-    // Get current user ID from store
-    let currentUserId: string | null = null;
-    currentUser.subscribe(user => {
-        if (user) {
-            currentUserId = user.id;
-        }
-    })();
+    $: currentUserId = auth.state.user?.id;
 
     onMount(async () => {
         if (!currentUserId) {
@@ -48,7 +42,6 @@
 
             const friendUserPromises = (acceptedFriendships ?? []).map(async (friendship) => {
                 const friendId = friendship.requester_id === currentUserId ? friendship.receiver_id : friendship.requester_id;
-                // Fetch user details for the friend
                 const friendDetails = await apiRequest('GET', `/users/${friendId}`, undefined, true);
                 return {
                     id: friendDetails.id,
@@ -70,7 +63,6 @@
     async function handleUnfriend(friendId: string) {
         if (confirm(`Are you sure you want to unfriend ${friends.find(f => f.id === friendId)?.username}?`)) {
             try {
-                // The backend's unfriend endpoint takes the friend's user ID, not the friendship ID
                 await apiRequest('DELETE', `/friendships/${friendId}`, undefined, true);
                 friends = friends.filter(f => f.id !== friendId);
                 alert('Unfriended successfully!');
@@ -94,11 +86,16 @@
             {#each (friends ?? []) as friend (friend.id)}
                 <li class="flex items-center justify-between p-3 bg-gray-50 rounded-lg shadow-sm">
                     <div class="flex items-center space-x-3">
-                        <div class="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 font-bold">
-                            {#if friend.avatar}
-                                <img src={friend.avatar} alt={friend.username} class="w-full h-full rounded-full object-cover" />
-                            {:else}
-                                {friend.username.substring(0, 2).toUpperCase()}
+                        <div class="relative">
+                            <div class="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 font-bold">
+                                {#if friend.avatar}
+                                    <img src={friend.avatar} alt={friend.username} class="w-full h-full rounded-full object-cover" />
+                                {:else}
+                                    {friend.username.substring(0, 2).toUpperCase()}
+                                {/if}
+                            </div>
+                            {#if $presenceStore[friend.id]?.status === 'online'}
+                                <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"></span>
                             {/if}
                         </div>
                         <span class="font-medium text-gray-800">{friend.username}</span>

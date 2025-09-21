@@ -32,6 +32,12 @@
                 media_url: mediaUrl || undefined,
                 privacy: privacy,
             });
+
+            // Ensure comments field is an array for optimistic update
+            if (!newPost.comments) {
+                newPost.comments = [];
+            }
+
             postContent = ''; // Clear input
             mediaType = '';
             mediaUrl = '';

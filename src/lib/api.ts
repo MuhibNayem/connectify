@@ -1,232 +1,110 @@
-import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { goto } from '$app/navigation';
+import { auth } from './stores/auth.svelte';
 
 const API_BASE_URL = 'http://localhost:8080/api'; // Backend API URL
 
 // Define Notification type based on backend model
 export interface Notification {
-    id: string;
-    recipient_id: string;
-    sender_id: string;
-    type: string; // e.g., "MENTION", "LIKE"
-    target_id: string;
-    target_type: string; // e.g., "post", "comment"
-    content: string;
-    data?: Record<string, any>; // Structured data for the notification
-    read: boolean;
-    created_at: string; // ISO 8601 string
-    user_id?: string; // Optional, for events related to user actions
+	id: string;
+	recipient_id: string;
+	sender_id: string;
+	type: string; // e.g., "MENTION", "LIKE"
+	target_id: string;
+	target_type: string; // e.g., "post", "comment"
+	content: string;
+	data?: Record<string, any>; // Structured data for the notification
+	read: boolean;
+	created_at: string; // ISO 8601 string
+	user_id?: string; // Optional, for events related to user actions
 }
 
 export interface NotificationListResponse {
-    notifications: Notification[];
-    total: number;
-    page: number;
-    limit: number;
-}
-
-// Svelte stores for authentication state
-export const accessToken = writable<string | null>(null);
-export const refreshToken = writable<string | null>(null);
-export const isAuthenticated = writable<boolean>(false);
-export const currentUser = writable<any | null>(null); // Store user data
-
-// Initialize auth state from localStorage if available
-if (browser) {
-    (async () => { // Wrap in an async IIFE
-        const storedAccessToken = localStorage.getItem('accessToken');
-        const storedRefreshToken = localStorage.getItem('refreshToken');
-        const storedCurrentUser = localStorage.getItem('currentUser'); // Retrieve stored user
-        if (storedAccessToken && storedRefreshToken) {
-            accessToken.set(storedAccessToken);
-            refreshToken.set(storedRefreshToken);
-            isAuthenticated.set(true);
-
-            if (storedCurrentUser) {
-                try {
-                    currentUser.set(JSON.parse(storedCurrentUser)); // Set user from localStorage
-                } catch (e) {
-                    console.error('Failed to parse stored user data:', e);
-                    localStorage.removeItem('currentUser'); // Clear invalid data
-                }
-            }
-
-            // Always fetch user data to ensure it's fresh
-            try {
-                await getCurrentUser();
-            } catch (error) {
-                console.error('Failed to re-fetch user on app load:', error);
-                clearAuth(); // Clear auth if user data cannot be fetched
-            }
-        }
-    })();
-}
-
-// Function to update auth stores and localStorage
-function setAuthTokens(access: string, refresh: string, user: any) {
-    accessToken.set(access);
-    refreshToken.set(refresh);
-    isAuthenticated.set(true);
-    currentUser.set(user);
-    if (browser) {
-        localStorage.setItem('accessToken', access);
-        localStorage.setItem('refreshToken', refresh);
-        localStorage.setItem('currentUser', JSON.stringify(user));
-    }
-}
-
-// Function to clear auth stores and localStorage
-export function clearAuth() {
-    accessToken.set(null);
-    refreshToken.set(null);
-    isAuthenticated.set(false);
-    currentUser.set(null);
-    if (browser) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-    }
+	notifications: Notification[];
+	total: number;
+	page: number;
+	limit: number;
 }
 
 // Generic API request function with authentication and token refresh
 export async function apiRequest(
-    method: string,
-    path: string,
-    data?: any,
-    requiresAuth: boolean = true
+	method: string,
+	path: string,
+	data?: any,
+	requiresAuth: boolean = true
 ): Promise<any> {
-    let headers: HeadersInit = {
-        'Content-Type': 'application/json',
-    };
+	const headers: HeadersInit = {
+		'Content-Type': 'application/json'
+	};
 
-    let currentAccessToken: string | null = null;
-    accessToken.subscribe(value => { currentAccessToken = value; })(); // Get current value from store
+	if (requiresAuth && auth.state.accessToken) {
+		headers['Authorization'] = `Bearer ${auth.state.accessToken}`;
+	}
 
-    if (requiresAuth && currentAccessToken) {
-        headers['Authorization'] = `Bearer ${currentAccessToken}`;
-    }
+	const config: RequestInit = {
+		method: method,
+		headers: headers,
+		body: data ? JSON.stringify(data) : undefined
+	};
 
-    const config: RequestInit = {
-        method: method,
-        headers: headers,
-        body: data ? JSON.stringify(data) : undefined,
-    };
+	try {
+		let response = await fetch(`${API_BASE_URL}${path}`, config);
 
-    try {
-        let response = await fetch(`${API_BASE_URL}${path}`, config);
+		// If unauthorized and requires auth, try to refresh token
+		if (response.status === 401 && requiresAuth) {
+			const refreshed = await auth.refresh();
+			if (refreshed) {
+				// Retry original request with new token
+				if (auth.state.accessToken) {
+					headers['Authorization'] = `Bearer ${auth.state.accessToken}`;
+					config.headers = headers;
+				}
+				response = await fetch(`${API_BASE_URL}${path}`, config);
+			} else {
+				// If refresh failed, redirect to login
+				if (browser) {
+					goto('/');
+				}
+				throw new Error('Authentication expired. Please log in again.');
+			}
+		}
 
-        // If unauthorized and requires auth, try to refresh token
-        if (response.status === 401 && requiresAuth) {
-            const refreshed = await refreshAuthToken();
-            if (refreshed) {
-                // Retry original request with new token
-                accessToken.subscribe(value => { currentAccessToken = value; })();
-                if (currentAccessToken) {
-                    headers['Authorization'] = `Bearer ${currentAccessToken}`;
-                    config.headers = headers;
-                }
-                response = await fetch(`${API_BASE_URL}${path}`, config);
-            } else {
-                // If refresh failed, clear auth and redirect to login
-                clearAuth();
-                // You might want to add a goto('/') here in a real app
-                throw new Error('Authentication expired. Please log in again.');
-            }
-        }
+		if (!response.ok) {
+			const errorData = await response.json();
+			throw new Error(errorData.error || 'Something went wrong');
+		}
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Something went wrong');
-        }
+		// For requests that don't return a body (e.g., 204 No Content)
+		if (response.status === 204) {
+			return;
+		}
 
-        return await response.json();
-    } catch (error) {
-        console.error('API Request Error:', error);
-        throw error;
-    }
+		return await response.json();
+	} catch (error) {
+		console.error('API Request Error:', error);
+		throw error;
+	}
 }
 
-// Specific authentication functions
-export async function login(credentials: any) {
-    const response = await apiRequest('POST', '/auth/login', credentials, false); // Login doesn't require auth
-    setAuthTokens(response.access_token, response.refresh_token, response.user);
-    return response;
-}
-
-export async function register(userData: any) {
-    const response = await apiRequest('POST', '/auth/register', userData, false); // Register doesn't require auth
-    setAuthTokens(response.access_token, response.refresh_token, response.user);
-    return response;
-}
-
-export async function logout() {
-    try {
-        await apiRequest('POST', '/auth/logout', {}, true); // Logout requires auth
-    } finally {
-        clearAuth(); // Always clear auth state on logout attempt
-    }
-}
-
-async function refreshAuthToken(): Promise<boolean> {
-    let currentRefreshToken: string | null = null;
-    refreshToken.subscribe(value => { currentRefreshToken = value; })();
-
-    if (!currentRefreshToken) {
-        return false;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ refresh_token: currentRefreshToken }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to refresh token');
-        }
-
-        const data = await response.json();
-        setAuthTokens(data.access_token, data.refresh_token, data.user);
-        return true;
-    } catch (error) {
-        console.error('Token refresh failed:', error);
-        clearAuth();
-        return false;
-    }
-}
-
-// Example of fetching current user (for protected routes)
-export async function getCurrentUser() {
-    try {
-        const user = await apiRequest('GET', '/users/me', undefined, true);
-        currentUser.set(user);
-        return user;
-    } catch (error) {
-        console.error('Failed to fetch current user:', error);
-        clearAuth(); // If fetching user fails, assume auth is bad
-        throw error;
-    }
-}
-
-// Notification API functions
+// Notification API functions (they now use the new apiRequest)
 export async function fetchNotifications(
-    page: number = 1,
-    limit: number = 10,
-    readStatus?: boolean
+	page: number = 1,
+	limit: number = 10,
+	readStatus?: boolean
 ): Promise<NotificationListResponse> {
-    let path = `/notifications?page=${page}&limit=${limit}`;
-    if (readStatus !== undefined) {
-        path += `&read=${readStatus}`;
-    }
-    return apiRequest('GET', path, undefined, true);
+	let path = `/notifications?page=${page}&limit=${limit}`;
+	if (readStatus !== undefined) {
+		path += `&read=${readStatus}`;
+	}
+	return apiRequest('GET', path, undefined, true);
 }
 
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
-    await apiRequest('PUT', `/notifications/${notificationId}/read`, undefined, true);
+	await apiRequest('PUT', `/notifications/${notificationId}/read`, undefined, true);
 }
 
 export async function getUnreadNotificationCount(): Promise<{ count: number }> {
-    return apiRequest('GET', '/notifications/unread', undefined, true);
+	return apiRequest('GET', '/notifications/unread', undefined, true);
 }
+
+// We can add other non-auth API functions here as needed

@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { get } from 'svelte/store'; // Corrected import
   import { notifications, setLoading, setError, markNotificationAsRead, setNotifications } from '../../stores/notifications';
-  import { fetchNotifications, getUnreadNotificationCount } from '../../api';
-  import { currentUser } from '../../api';
+  import { fetchNotifications, getUnreadNotificationCount, markNotificationAsRead as apiMarkAsRead } from '$lib/api';
+  import { auth } from '$lib/stores/auth.svelte';
   import { formatDistanceToNow } from 'date-fns';
 
   let currentPage = 1;
@@ -14,14 +13,16 @@
     setLoading(true);
     setError(null);
     try {
-      const $currentUser = get(currentUser); 
-      if (!$currentUser) {
+      if (!auth.state.user) {
         setError('User not authenticated.');
         return;
       }
 
       const response = await fetchNotifications(currentPage, limit);
       const unreadCountResponse = await getUnreadNotificationCount();
+
+      console.log('Fetched notifications:', response);
+      console.log('Unread count:', unreadCountResponse);
 
       setNotifications(response.notifications, unreadCountResponse.count);
       totalNotifications = response.total;
@@ -34,7 +35,7 @@
 
   async function handleMarkAsRead(notificationId: string) {
     try {
-      await markNotificationAsRead(notificationId);
+      await apiMarkAsRead(notificationId);
       markNotificationAsRead(notificationId); // Update store
     } catch (err: any) {
       setError(err.message || 'Failed to mark notification as read.');
@@ -93,12 +94,12 @@
               {getNotificationMessage(notification)}
             </p>
             <span class="text-xs text-gray-500">
-              <!-- {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })} -->
+              { notification.created_at ? formatDistanceToNow(new Date(notification.created_at), { addSuffix: true }) : '' }
             </span>
           </div>
           {#if !notification.read}
             <button
-              on:click={() => handleMarkAsRead(notification.id)}
+              onclick={() => handleMarkAsRead(notification.id)}
               class="ml-4 px-3 py-1 text-sm font-medium text-blue-700 bg-blue-100 rounded-full hover:bg-blue-200"
             >
               Mark as Read
@@ -110,7 +111,7 @@
 
     {#if $notifications?.notifications?.length < totalNotifications}
       <button
-        on:click={() => {
+        onclick={() => {
           currentPage++;
           loadNotifications();
         }}

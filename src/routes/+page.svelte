@@ -4,19 +4,18 @@
     import { Input } from '$lib/components/ui/input';
     import { Label } from '$lib/components/ui/label';
     import { Checkbox } from '$lib/components/ui/checkbox';
-    import { goto } from '$app/navigation'; // Keep goto for post-login redirect
-    import { login } from '$lib/api'; // Import login function
+    import { goto } from '$app/navigation';
+    import { auth } from '$lib/stores/auth.svelte'; // Import the new auth store
 
     let email = '';
     let password = '';
     let rememberMe = false;
-    let errorMessage: string | null = null; // For displaying API errors
+    let errorMessage: string | null = null;
 
     async function handleLogin() {
-        errorMessage = null; // Clear previous errors
+        errorMessage = null;
         try {
-            const response = await login({ email, password });
-            console.log('Login successful:', response);
+            await auth.login({ email, password }); // Use the new auth store
             goto('/dashboard'); // Redirect to dashboard on success
         } catch (error: any) {
             console.error('Login failed:', error.message);
@@ -26,7 +25,7 @@
 </script>
 
 <AuthLayout title="Welcome Back" description="Sign in to your Connectify account">
-    <form on:submit|preventDefault={handleLogin} class="space-y-6">
+    <form onsubmit={handleLogin} class="space-y-6">
         {#if errorMessage}
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
                 <span class="block sm:inline">{errorMessage}</span>

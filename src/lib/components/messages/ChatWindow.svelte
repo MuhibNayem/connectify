@@ -1,53 +1,91 @@
 <script lang="ts">
 	import MessageBubble from '$lib/components/messages/MessageBubble.svelte';
 	import MessageInput from '$lib/components/messages/MessageInput.svelte';
-	import { Button } from '$lib/components/ui/button'; // Adjust the path if needed
-	// Assuming icons like Phone, Video, Info from Lucide Svelte
-	// import { Phone, Video, Info } from 'lucide-svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { onMount } from 'svelte';
+	import { websocketMessages } from '$lib/websocket';
+	import { apiRequest } from '$lib/api';
+	import { auth } from '$lib/stores/auth.svelte';
 
 	export let conversationId: string;
 
-	// Placeholder for messages
-	// In a real app, these would be fetched from API and updated via WebSocket
-	let messages = [
-		{ id: 1, sender: 'Alice Smith', content: 'Hi there!', time: '10:00 AM', isSelf: false },
-		{ id: 2, sender: 'You', content: 'Hey Alice! How are you?', time: '10:01 AM', isSelf: true },
-		{
-			id: 3,
-			sender: 'Alice Smith',
-			content: 'Im good, thanks! Just working on some project stuff.',
-			time: '10:05 AM',
-			isSelf: false
-		},
-		{
-			id: 4,
-			sender: 'You',
-			content: 'Nice! Let me know if you need any help.',
-			time: '10:06 AM',
-			isSelf: true
-		}
-	];
+	let messages: any[] = [];
+	let conversationName = 'Loading...';
+	let conversationType = 'direct'; // Placeholder, should be fetched
 
-	// Placeholder for conversation details
-	// In a real app, this would be fetched based on conversationId
-	let conversationName = 'Alice Smith'; // Or 'Project Team' if group
-	let conversationType = 'direct'; // Or 'group'
+	let typingUsers: { [key: string]: boolean } = {};
+	$: currentUserId = auth.state.user?.id;
 
-	function handleNewMessage(event: CustomEvent<string>) {
-		const newMessageContent = event.detail;
-		if (newMessageContent.trim()) {
-			const newMessage = {
-				id: messages.length + 1,
-				sender: 'You', // Placeholder
-				content: newMessageContent,
-				time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-				isSelf: true
-			};
-			messages = [...messages, newMessage];
-			// In a real app, send this message to the backend via API
-			console.log('Sending message:', newMessageContent);
+	async function fetchMessages() {
+		try {
+			const response = await apiRequest('GET', `/messages?receiverID=${conversationId}`); // Assuming direct message for now
+			messages = response.messages;
+		} catch (error) {
+			console.error('Failed to fetch messages:', error);
 		}
 	}
+
+	onMount(() => {
+		fetchMessages();
+
+		// In a real app, fetch conversation details and messages here
+		// For now, simulate fetching
+		setTimeout(() => {
+			conversationName = 'Alice Smith';
+			conversationType = 'direct';
+		}, 500);
+
+		const unsubscribe = websocketMessages.subscribe((event) => {
+			if (!event) return;
+
+			switch (event.type) {
+				case 'TypingEvent':
+					const typingEvent = event.data;
+					if (typingEvent.conversation_id === conversationId && typingEvent.user_id !== currentUserId) {
+						typingUsers = { ...typingUsers, [typingEvent.user_id]: typingEvent.is_typing };
+					}
+					break;
+				case 'Message': // Assuming backend sends messages with type 'Message'
+					const newMessage = event.data;
+					// Check if the message belongs to this conversation
+					if ((newMessage.receiver_id === currentUserId && newMessage.sender_id === conversationId) ||
+						(newMessage.sender_id === currentUserId && newMessage.receiver_id === conversationId) ||
+						(newMessage.group_id === conversationId)) {
+							
+						// Add message if not already present (to avoid duplicates from initial fetch)
+						if (!messages.some(m => m.id === newMessage.id)) {
+							messages = [...messages, newMessage];
+						}
+					}
+					break;
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
+	});
+
+	async function handleNewMessage(event: CustomEvent<string>) {
+		const messageContent = event.detail;
+		if (messageContent.trim()) {
+			try {
+				// Send message to backend via API
+				const sentMessage = await apiRequest('POST', '/messages', {
+					receiver_id: conversationId, // Assuming direct message
+					content: messageContent,
+					content_type: 'text',
+				});
+				// Message will be added via WebSocket event, so no need to add here
+				console.log('Message sent:', sentMessage);
+			} catch (error) {
+				console.error('Failed to send message:', error);
+				alert('Failed to send message.');
+			}
+		}
+	}
+
+	$: activeTypingUsers = Object.keys(typingUsers).filter(key => typingUsers[key]);
 </script>
 
 <div class="flex h-full flex-col">
@@ -89,10 +127,16 @@
 		{#each messages as message (message.id)}
 			<MessageBubble {message} />
 		{/each}
+
+		{#if activeTypingUsers.length > 0}
+			<div class="text-sm text-gray-500 italic">
+				{activeTypingUsers.join(', ')} {activeTypingUsers.length > 1 ? 'are' : 'is'} typing...
+			</div>
+		{/if}
 	</div>
 
 	<!-- Message Input -->
 	<div class="border-t border-gray-200 bg-white p-4">
-		<MessageInput on:sendMessage={handleNewMessage} />
+		<MessageInput on:sendMessage={handleNewMessage} conversationId={conversationId} />
 	</div>
 </div>

@@ -50,6 +50,10 @@ export const setNotifications = (fetchedNotifications: Notification[], totalUnre
   }));
 };
 
+export const setUnreadCount = (count: number) => {
+  notifications.update((state) => ({ ...state, unreadCount: count }));
+};
+
 export const setLoading = (loading: boolean) => {
   notifications.update((state) => ({ ...state, isLoading: loading }));
 };

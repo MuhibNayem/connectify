@@ -2,15 +2,35 @@
     import { Input } from '$lib/components/ui/input';
     import { Button } from '$lib/components/ui/button';
     import { createEventDispatcher } from 'svelte';
+    import { sendWebSocketMessage } from '$lib/websocket';
 
     const dispatch = createEventDispatcher();
 
+    export let conversationId: string; // ID of the current conversation
+
     let messageContent: string = '';
+    let typingTimeout: ReturnType<typeof setTimeout>;
+
+    function handleTyping() {
+        sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: true });
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: false });
+        }, 1500); // Send stop typing after 1.5 seconds of no input
+    }
+
+    function handleBlur() {
+        clearTimeout(typingTimeout);
+        sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: false });
+    }
 
     function sendMessage() {
         if (messageContent.trim()) {
             dispatch('sendMessage', messageContent);
             messageContent = ''; // Clear input after sending
+            // Ensure stop typing is sent immediately after sending a message
+            clearTimeout(typingTimeout);
+            sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: false });
         }
     }
 
@@ -27,6 +47,8 @@
         type="text"
         placeholder="Type a message..."
         bind:value={messageContent}
+        on:input={handleTyping}
+        on:blur={handleBlur}
         on:keydown={handleKeyDown}
         class="flex-1 py-2 px-4 rounded-full bg-gray-100 border-none focus:ring-indigo-500 focus:border-indigo-500"
     />

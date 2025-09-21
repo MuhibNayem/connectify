@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { apiRequest, currentUser } from '$lib/api';
+    import { apiRequest } from '$lib/api';
+    import { auth } from '$lib/stores/auth.svelte';
     import { onMount } from 'svelte';
     import { Button } from '$lib/components/ui/button';
 
@@ -25,12 +26,7 @@
     let loading = true;
     let error: string | null = null;
 
-    let currentUserId: string | null = null;
-    currentUser.subscribe(user => {
-        if (user) {
-            currentUserId = user.id;
-        }
-    })();
+    $: currentUserId = auth.state.user?.id;
 
     onMount(async () => {
         if (!currentUserId) {
@@ -96,12 +92,7 @@
     async function handleCancelRequest(requestId: string) {
         if (confirm('Are you sure you want to cancel this request?')) {
             try {
-                // Assuming the backend's unfriend endpoint can also cancel pending requests
-                // The backend API doc says DELETE /friendships/:id to unfriend.
-                // If a pending request is treated as a friendship, this might work.
-                // Otherwise, a specific /friendships/requests/:id/cancel endpoint might be needed.
-                // For now, I'll use the unfriend endpoint as a placeholder.
-                await apiRequest('DELETE', `/friendships/${requestId}`, undefined, true); // Using friendship ID here
+                await apiRequest('DELETE', `/friendships/${requestId}`, undefined, true);
                 alert('Request cancelled successfully!');
                 await fetchRequests(); // Refresh lists
             } catch (e: any) {
