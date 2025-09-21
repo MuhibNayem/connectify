@@ -101,8 +101,10 @@
             <p class="text-sm text-gray-800">{comment.content}</p>
         </div>
         <div class="text-xs text-gray-500 flex items-center space-x-2 px-3">
-            <button class="font-semibold hover:underline" onclick={() => showReplyForm = !showReplyForm}>Reply</button>
-            <span>·</span>
+            {#if !isReply}
+                <button class="font-semibold hover:underline" onclick={() => showReplyForm = !showReplyForm}>Reply</button>
+                <span>·</span>
+            {/if}
             <span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
         </div>
 
