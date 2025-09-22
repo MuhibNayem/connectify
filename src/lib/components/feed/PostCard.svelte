@@ -60,7 +60,6 @@
 
 		const unsubscribe = websocketMessages.subscribe((event) => {
 			if (!event?.data) return;
-			console.log('WebSocket event received in PostCard:', event?.data);
 
 			// Handle ReactionCreated event
 			if (event.type === 'ReactionCreated' && event.data.target_id === post.id) {

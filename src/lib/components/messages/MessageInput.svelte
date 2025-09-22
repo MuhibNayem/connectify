@@ -5,6 +5,7 @@ Component for the message input field at the bottom of the chat window.
     import { sendWebSocketMessage } from '$lib/websocket';
 
     export let onSendMessage: (content: string) => Promise<void>;
+    export let conversationId: string;
 
     let content = '';
     let isSending = false;
@@ -13,9 +14,9 @@ Component for the message input field at the bottom of the chat window.
     let typingTimer: any;
     function handleTyping() {
         clearTimeout(typingTimer);
-        sendWebSocketMessage('typing', { isTyping: true });
+        sendWebSocketMessage('typing', { isTyping: true, conversation_id: conversationId });
         typingTimer = setTimeout(() => {
-            sendWebSocketMessage('typing', { isTyping: false });
+            sendWebSocketMessage('typing', { isTyping: false, conversation_id: conversationId });
         }, 2000); // Consider user as "stopped typing" after 2 seconds
     }
 

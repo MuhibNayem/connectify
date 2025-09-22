@@ -23,6 +23,7 @@ export interface Message {
 	content_type: string;
 	media_urls?: string[];
 	seen_by: string[];
+	delivered_to?: string[];
 	is_deleted: boolean;
 	deleted_at?: string;
 	is_edited: boolean;
@@ -299,12 +300,15 @@ export async function sendMessage(payload: MessageRequest): Promise<Message> {
 	return apiRequest('POST', '/messages', payload, true);
 }
 
-export async function markMessagesAsSeen(messageIds: string[]): Promise<void> {
-	await apiRequest('POST', '/messages/seen', messageIds, true);
-}
+	export async function markMessagesAsSeen(messageIds: string[]): Promise<void> {
+		await apiRequest('POST', '/messages/seen', messageIds, true);
+	}
 
-export async function getUnreadMessageCount(): Promise<UnreadCountResponse> {
-	return apiRequest('GET', '/messages/unread', undefined, true);
+	export async function markMessagesAsDelivered(messageIds: string[]): Promise<void> {
+		await apiRequest('POST', '/messages/delivered', messageIds, true);
+	}
+
+	export async function getUnreadMessageCount(): Promise<UnreadCountResponse> {	return apiRequest('GET', '/messages/unread', undefined, true);
 }
 
 export async function deleteMessage(messageId: string): Promise<SuccessResponse> {
