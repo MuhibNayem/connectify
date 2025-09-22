@@ -4,28 +4,31 @@
     import { Input } from '$lib/components/ui/input';
     import { Label } from '$lib/components/ui/label';
     import { goto } from '$app/navigation';
-    import { register } from '$lib/api'; // Import register function
+    import { auth } from '$lib/stores/auth.svelte'; // Import the auth store
 
     let username = '';
     let email = '';
     let password = '';
     let confirmPassword = '';
-    let errorMessage: string | null = null; // For displaying API errors
+    let errorMessage: string | null = null;
+    let isLoading = false;
 
     async function handleRegister() {
-        errorMessage = null; // Clear previous errors
+        errorMessage = null;
+        isLoading = true;
         if (password !== confirmPassword) {
             errorMessage = 'Passwords do not match!';
+            isLoading = false;
             return;
         }
         try {
-            const response = await register({ username, email, password });
-            console.log('Registration successful:', response);
-            alert('Registration successful! You are now logged in.');
+            await auth.register({ username, email, password });
             goto('/dashboard'); // Redirect to dashboard on success
         } catch (error: any) {
             console.error('Registration failed:', error.message);
             errorMessage = error.message || 'Registration failed. Please try again.';
+        } finally {
+            isLoading = false;
         }
     }
 </script>

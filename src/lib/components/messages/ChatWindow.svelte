@@ -1,142 +1,235 @@
+<!--
+This is the main chat window component.
+It orchestrates the display of messages and the message input field.
+-->
 <script lang="ts">
-	import MessageBubble from '$lib/components/messages/MessageBubble.svelte';
-	import MessageInput from '$lib/components/messages/MessageInput.svelte';
-	import { Button } from '$lib/components/ui/button';
 	import { onMount } from 'svelte';
+	import { getMessages, sendMessage, markMessagesAsSeen } from '$lib/api';
+	import Message from './Message.svelte';
+	import MessageInput from './MessageInput.svelte';
 	import { websocketMessages } from '$lib/websocket';
-	import { apiRequest } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 
-	export let conversationId: string;
+	let { conversationId } = $props<{ conversationId: string }>();
 
-	let messages: any[] = [];
-	let conversationName = 'Loading...';
-	let conversationType = 'direct'; // Placeholder, should be fetched
+	console.log({ conversationId });
 
-	let typingUsers: { [key: string]: boolean } = {};
-	$: currentUserId = auth.state.user?.id;
+	let messages = $state<any[]>([]);
+	let isLoading = $state(true);
+	let error = $state<string | null>(null);
+	let chatContainer: HTMLElement;
+	let isOpponentTyping = $state(false);
 
-	async function fetchMessages() {
+	onMount(async () => {
+		await loadMessages();
+	});
+
+	async function loadMessages() {
+		isLoading = true;
+		error = null;
 		try {
-			const response = await apiRequest('GET', `/messages?receiverID=${conversationId}`); // Assuming direct message for now
-			messages = response.messages;
-		} catch (error) {
-			console.error('Failed to fetch messages:', error);
+			const [type, id] = conversationId.split('-');
+			let params: { receiverID?: string; groupID?: string } = {};
+
+			if (type === 'group') {
+				params.groupID = id;
+			} else if (type === 'user') {
+				params.receiverID = id;
+			} else {
+				throw new Error('Invalid conversation ID format.');
+			}
+
+			const response = await getMessages(params);
+			console.log('Fetched response:', response);
+			if (response && Array.isArray(response.messages)) {
+				messages = response.messages.reverse();
+			} else {
+				messages = [];
+			}
+		} catch (e: any) {
+			error = e.message || 'Failed to load messages.';
+		} finally {
+			isLoading = false;
 		}
+	}
+
+	async function handleSendMessage(content: string) {
+		try {
+			const [type, id] = conversationId.split('-');
+			let payload: any = {
+				content: content,
+				content_type: 'text' // Default to text
+			};
+
+			if (type === 'group') {
+				payload.group_id = id;
+			} else if (type === 'user') {
+				payload.receiver_id = id;
+			} else {
+				throw new Error('Invalid conversation ID format.');
+			}
+
+			const newMessage = await sendMessage(payload);
+			messages.push(newMessage); // Optimistically add the new message
+		} catch (e) {
+			console.error('Send message failed:', e);
+			// Handle failed message, e.g., show a 'failed to send' status
+		}
+	}
+
+	// Scroll to the bottom of the chat container when messages change
+	$effect(() => {
+		console.log('Fetched messages:', messages[0]);
+		if (chatContainer && messages) {
+			chatContainer.scrollTop = chatContainer.scrollHeight;
+		}
+	});
+
+	// Handle real-time updates from WebSocket
+	websocketMessages.subscribe((event) => {
+		if (!event) return;
+
+		const [type, currentChatId] = conversationId.split('-');
+
+		switch (event.type) {
+			case 'MESSAGE_CREATED': {
+				const newMessage = event.data;
+				// Check if the new message belongs to the current conversation
+				let belongsToCurrentChat = false;
+				if (type === 'group' && newMessage.group_id === currentChatId) {
+					belongsToCurrentChat = true;
+				} else if (
+					type === 'user' &&
+					(newMessage.receiver_id === currentChatId || newMessage.sender_id === currentChatId)
+				) {
+					belongsToCurrentChat = true;
+				}
+
+				if (belongsToCurrentChat) {
+					if (!messages.find((m) => m.id === newMessage.id)) {
+						                        messages.push(newMessage);
+						                        // Mark message as read if current user is the receiver and window is focused
+						                        if (document.hasFocus() && newMessage.receiver_id === auth.state.user?.id) {
+						                            markAsRead(newMessage.id);
+						                        }					}
+				}
+				break;
+			}
+			case 'MESSAGE_EDITED_UPDATE': {
+				const { message_id, new_content } = event.data;
+				const messageIndex = messages.findIndex((m) => m.id === message_id);
+				                if (messageIndex !== -1) {
+				                    messages[messageIndex].content = new_content;
+				                    messages[messageIndex].is_edited = true;
+				                }				break;
+			}
+			case 'MESSAGE_REACTION_UPDATE': {
+				const { message_id, user_id, emoji, action } = event.data;
+				const messageIndex = messages.findIndex((m) => m.id === message_id);
+				if (messageIndex === -1) return;
+
+				if (!messages[messageIndex].reactions) {
+					messages[messageIndex].reactions = [];
+				}
+
+				const existingReactionIndex = messages[messageIndex].reactions.findIndex(
+					(r: any) => r.user_id === user_id && r.emoji === emoji
+				);
+
+				                if (action === 'add' && existingReactionIndex === -1) {
+				                    messages[messageIndex].reactions.push({
+				                        user_id,
+				                        emoji,
+				                        timestamp: new Date().toISOString()
+				                    });
+				                } else if (action === 'remove' && existingReactionIndex !== -1) {
+				                    messages[messageIndex].reactions.splice(existingReactionIndex, 1);
+				                }			}
+			case 'MESSAGE_READ_UPDATE': {
+				const { message_ids, reader_id } = event.data;
+				if (reader_id === auth.state.user?.id) {
+					// The other user in the chat has read the messages
+					                    messages.forEach((msg) => {
+					                        if (message_ids.includes(msg.id)) {
+					                            if (!msg.seen_by) msg.seen_by = [];
+					                            if (!msg.seen_by.includes(reader_id)) {
+					                                msg.seen_by.push(reader_id);
+					                            }
+					                        }
+					                    });				}
+				break;
+			}
+			case 'TYPING': {
+				const { user_id, is_typing } = event.data;
+				if (user_id === currentChatId) {
+					// The other user is typing (assuming currentChatId is the other user's ID for direct messages)
+					isOpponentTyping = is_typing;
+					// Optional: add a timer to automatically set isOpponentTyping to false
+				}
+				break;
+			}
+		}
+	});
+
+	// --- Read Receipts ---
+	let readQueue = new Set<string>();
+	let debounceTimer: any;
+
+	function markAsRead(messageId: string) {
+		readQueue.add(messageId);
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(async () => {
+			if (readQueue.size > 0) {
+				await markMessagesAsSeen(Array.from(readQueue));
+				readQueue.clear();
+			}
+		}, 1000); // Debounce for 1 second
 	}
 
 	onMount(() => {
-		fetchMessages();
-
-		// In a real app, fetch conversation details and messages here
-		// For now, simulate fetching
-		setTimeout(() => {
-			conversationName = 'Alice Smith';
-			conversationType = 'direct';
-		}, 500);
-
-		const unsubscribe = websocketMessages.subscribe((event) => {
-			if (!event) return;
-
-			switch (event.type) {
-				case 'TypingEvent':
-					const typingEvent = event.data;
-					if (typingEvent.conversation_id === conversationId && typingEvent.user_id !== currentUserId) {
-						typingUsers = { ...typingUsers, [typingEvent.user_id]: typingEvent.is_typing };
-					}
-					break;
-				case 'Message': // Assuming backend sends messages with type 'Message'
-					const newMessage = event.data;
-					// Check if the message belongs to this conversation
-					if ((newMessage.receiver_id === currentUserId && newMessage.sender_id === conversationId) ||
-						(newMessage.sender_id === currentUserId && newMessage.receiver_id === conversationId) ||
-						(newMessage.group_id === conversationId)) {
-							
-						// Add message if not already present (to avoid duplicates from initial fetch)
-						if (!messages.some(m => m.id === newMessage.id)) {
-							messages = [...messages, newMessage];
-						}
-					}
-					break;
-			}
-		});
-
-		return () => {
-			unsubscribe();
-		};
-	});
-
-	async function handleNewMessage(event: CustomEvent<string>) {
-		const messageContent = event.detail;
-		if (messageContent.trim()) {
-			try {
-				// Send message to backend via API
-				const sentMessage = await apiRequest('POST', '/messages', {
-					receiver_id: conversationId, // Assuming direct message
-					content: messageContent,
-					content_type: 'text',
-				});
-				// Message will be added via WebSocket event, so no need to add here
-				console.log('Message sent:', sentMessage);
-			} catch (error) {
-				console.error('Failed to send message:', error);
-				alert('Failed to send message.');
-			}
+		// Mark all initial messages as read
+		const unreadIds = messages
+			.filter(
+				(m) => m.sender_id !== auth.state.user?.id && !m.seen_by?.includes(auth.state.user?.id)
+			)
+			.map((m) => m.id);
+		if (unreadIds.length > 0) {
+			unreadIds.forEach((id) => markAsRead(id));
 		}
-	}
-
-	$: activeTypingUsers = Object.keys(typingUsers).filter(key => typingUsers[key]);
+	});
 </script>
 
 <div class="flex h-full flex-col">
 	<!-- Chat Header -->
-	<div class="flex items-center justify-between border-b border-gray-200 bg-white p-4 shadow-sm">
-		<div class="flex items-center space-x-3">
-			<div
-				class="flex h-10 w-10 items-center justify-center rounded-full bg-gray-300 text-lg font-bold text-gray-600"
-			>
-				{conversationName.substring(0, 2)}
-			</div>
-			<div>
-				<h3 class="font-semibold text-gray-900">{conversationName}</h3>
-				{#if conversationType === 'direct'}
-					<p class="text-sm text-gray-500">Active now</p>
-				{:else}
-					<p class="text-sm text-gray-500">3 members</p>
-				{/if}
-			</div>
-		</div>
-		<div class="flex space-x-2">
-			<Button variant="ghost" size="icon" class="rounded-full">
-				<!-- <Phone size={20} /> -->
-				<span class="text-xl">📞</span>
-			</Button>
-			<Button variant="ghost" size="icon" class="rounded-full">
-				<!-- <Video size={20} /> -->
-				<span class="text-xl">📹</span>
-			</Button>
-			<Button variant="ghost" size="icon" class="rounded-full">
-				<!-- <Info size={20} /> -->
-				<span class="text-xl">ℹ️</span>
-			</Button>
-		</div>
-	</div>
+	<header class="border-b border-gray-200 bg-white p-4">
+		<!-- Placeholder for chat partner's name and status -->
+		<h2 class="text-lg font-bold">Chat</h2>
+	</header>
 
-	<!-- Messages Area -->
-	<div class="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-4">
-		{#each messages as message (message.id)}
-			<MessageBubble {message} />
-		{/each}
+	<!-- Message Display Area -->
+	<div bind:this={chatContainer} class="flex-1 overflow-y-auto bg-gray-50 p-4">
+		{#if isLoading}
+			<p>Loading messages...</p>
+		{:else if error}
+			<p class="text-red-500">{error}</p>
+		{:else}
+			{#each messages as message (message.id)}
+				<Message {message} />
+			{/each}
 
-		{#if activeTypingUsers.length > 0}
-			<div class="text-sm text-gray-500 italic">
-				{activeTypingUsers.join(', ')} {activeTypingUsers.length > 1 ? 'are' : 'is'} typing...
-			</div>
+			{#if isOpponentTyping}
+				<div class="my-2 flex items-center gap-2.5">
+					<!-- Typing indicator -->
+					<div class="flex items-center space-x-1">
+						<span class="h-2 w-2 animate-pulse rounded-full bg-gray-400"></span>
+						<span class="h-2 w-2 animate-pulse rounded-full bg-gray-400 delay-75"></span>
+						<span class="h-2 w-2 animate-pulse rounded-full bg-gray-400 delay-150"></span>
+					</div>
+				</div>
+			{/if}
 		{/if}
 	</div>
 
 	<!-- Message Input -->
-	<div class="border-t border-gray-200 bg-white p-4">
-		<MessageInput on:sendMessage={handleNewMessage} conversationId={conversationId} />
-	</div>
+	<MessageInput onSendMessage={handleSendMessage} />
 </div>

@@ -1,59 +1,61 @@
+<!--
+Component for the message input field at the bottom of the chat window.
+-->
 <script lang="ts">
-    import { Input } from '$lib/components/ui/input';
-    import { Button } from '$lib/components/ui/button';
-    import { createEventDispatcher } from 'svelte';
     import { sendWebSocketMessage } from '$lib/websocket';
 
-    const dispatch = createEventDispatcher();
+    export let onSendMessage: (content: string) => Promise<void>;
 
-    export let conversationId: string; // ID of the current conversation
+    let content = '';
+    let isSending = false;
 
-    let messageContent: string = '';
-    let typingTimeout: ReturnType<typeof setTimeout>;
-
+    // Typing indicator logic
+    let typingTimer: any;
     function handleTyping() {
-        sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: true });
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-            sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: false });
-        }, 1500); // Send stop typing after 1.5 seconds of no input
+        clearTimeout(typingTimer);
+        sendWebSocketMessage('typing', { isTyping: true });
+        typingTimer = setTimeout(() => {
+            sendWebSocketMessage('typing', { isTyping: false });
+        }, 2000); // Consider user as "stopped typing" after 2 seconds
     }
 
-    function handleBlur() {
-        clearTimeout(typingTimeout);
-        sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: false });
-    }
+    async function handleSubmit() {
+        if (!content.trim() || isSending) return;
 
-    function sendMessage() {
-        if (messageContent.trim()) {
-            dispatch('sendMessage', messageContent);
-            messageContent = ''; // Clear input after sending
-            // Ensure stop typing is sent immediately after sending a message
-            clearTimeout(typingTimeout);
-            sendWebSocketMessage('typing', { conversation_id: conversationId, is_typing: false });
-        }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault(); // Prevent new line in textarea
-            sendMessage();
+        isSending = true;
+        try {
+            await onSendMessage(content);
+            content = ''; // Clear input on successful send
+        } catch (error) {
+            console.error("Failed to send message:", error);
+            // Optionally, show an error to the user
+        } finally {
+            isSending = false;
         }
     }
 </script>
 
-<div class="flex items-center space-x-2">
-    <Input
-        type="text"
-        placeholder="Type a message..."
-        bind:value={messageContent}
-        on:input={handleTyping}
-        on:blur={handleBlur}
-        on:keydown={handleKeyDown}
-        class="flex-1 py-2 px-4 rounded-full bg-gray-100 border-none focus:ring-indigo-500 focus:border-indigo-500"
-    />
-    <Button on:click={sendMessage} class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-2 size-10">
-        <!-- Send icon placeholder -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 7m7-7-7 7L2 12l7 7 7-7 7 7V2z"/></svg>
-    </Button>
-</div>
+<form on:submit|preventDefault={handleSubmit} class="p-4 bg-white border-t border-gray-200">
+    <div class="flex items-center">
+        <!-- Future: Add buttons for attachments, emojis, etc. here -->
+        <textarea
+            bind:value={content}
+            disabled={isSending}
+            on:input={handleTyping}
+            on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+            rows="1"
+            class="flex-1 mx-4 p-2.5 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 resize-none"
+            placeholder="Type a message..."
+        ></textarea>
+        <button
+            type="submit"
+            disabled={isSending || !content.trim()}
+            class="inline-flex justify-center p-2 text-blue-600 rounded-full cursor-pointer hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+            <svg class="w-6 h-6 rotate-90" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+            </svg>
+            <span class="sr-only">Send message</span>
+        </button>
+    </div>
+</form>

@@ -48,6 +48,33 @@ export function connectWebSocket() {
 				case 'NOTIFICATION_CREATED':
 					addNotification(parsedEvent.data as Notification);
 					break;
+				case 'MESSAGE_REACTION_UPDATE':
+					// Ensure the data is correctly typed as ReactionEvent
+					websocketMessages.set({
+						type: parsedEvent.type,
+						data: parsedEvent.data as ReactionEvent
+					});
+					break;
+				case 'MESSAGE_READ_UPDATE':
+					// Ensure the data is correctly typed as ReadReceiptEvent
+					websocketMessages.set({
+						type: parsedEvent.type,
+						data: parsedEvent.data as ReadReceiptEvent
+					});
+					break;
+				case 'MESSAGE_EDITED_UPDATE':
+					// Ensure the data is correctly typed as MessageEditedEvent
+					websocketMessages.set({
+						type: parsedEvent.type,
+						data: parsedEvent.data as MessageEditedEvent
+					});
+					break;
+				case 'MESSAGE_CREATED':
+					websocketMessages.set({
+						type: parsedEvent.type,
+						data: parsedEvent.data as MessageCreatedEvent
+					});
+					break;
 				// For other events, we update the generic store for other components to use
 				default:
 					websocketMessages.set(parsedEvent);

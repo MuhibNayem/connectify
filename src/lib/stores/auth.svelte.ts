@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { register as apiRegister } from '$lib/api'; // Renamed to avoid conflict
 
 // Define the shape of the user and auth state
 interface User {
@@ -18,7 +19,7 @@ interface AuthState {
 const API_BASE_URL = 'http://localhost:8080/api';
 
 // Create the state with Svelte 5 Runes
-let authState = $state<AuthState>({
+const authState = $state<AuthState>({
     user: null,
     accessToken: null,
     refreshToken: null,
@@ -99,18 +100,7 @@ export const auth = {
 
     // Register method
     register: async (userData: any) => {
-        const response = await fetch(`${API_BASE_URL}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(userData),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Registration failed');
-        }
-
-        const data = await response.json();
+        const data = await apiRegister(userData);
         authState.user = data.user;
         authState.accessToken = data.access_token;
         authState.refreshToken = data.refresh_token;
