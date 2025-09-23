@@ -339,6 +339,11 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
 	return apiRequest('GET', '/conversations', undefined, true);
 }
 
+export async function markConversationAsSeen(conversationId: string, timestamp: string, isGroup: boolean): Promise<void> {
+	const [type, id] = conversationId.split('-');
+	await apiRequest('POST', `/conversations/${id}/seen`, { timestamp, is_group: isGroup }, true);
+}
+
 export async function createGroup(payload: CreateGroupRequest): Promise<GroupResponse> {
 	return apiRequest('POST', '/groups', payload, true);
 }

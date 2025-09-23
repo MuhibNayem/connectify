@@ -16,7 +16,6 @@ It styles messages differently based on whether they were sent by the current us
 		dispatch('rendered', { messageId: message.id });
 	});
 
-	console.log({ message });
 	const isMe = auth.state.user?.id === message.sender_id;
 </script>
 

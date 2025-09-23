@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { addNotification } from './stores/notifications';
 import type { Notification } from './api';
+import { updateUserStatus } from './stores/presence';
 
 export interface WebSocketEvent {
 	type: string;
@@ -74,6 +75,10 @@ export function connectWebSocket() {
 						type: parsedEvent.type,
 						data: parsedEvent.data as MessageCreatedEvent
 					});
+					break;
+				case 'presence_update':
+					const { user_id, status, last_seen } = parsedEvent.data;
+					updateUserStatus(user_id, status, last_seen);
 					break;
 				// For other events, we update the generic store for other components to use
 				default:

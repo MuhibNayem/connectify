@@ -8,11 +8,17 @@ Fetches friends and groups to populate the list.
 	import { getConversationSummaries, type ConversationSummary } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
+	import { presenceStore, type PresenceState } from '$lib/stores/presence';
 
 	let conversations = $state<ConversationSummary[]>([]);
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 	let showCreateGroupModal = $state(false);
+	let presenceState = $state<PresenceState>({});
+
+	presenceStore.subscribe((value) => {
+		presenceState = value;
+	});
 
 	onMount(async () => {
 		if (!auth.state.user) {
@@ -92,6 +98,7 @@ Fetches friends and groups to populate the list.
 				{#each conversations as conv (conv.id)}
 					{@const conversationId = $page.params.id}
 					{@const isActive = conversationId === `${conv.is_group ? 'group' : 'user'}-${conv.id}`}
+					{@const isOnline = !conv.is_group && presenceState[conv.id]?.status === 'online'}
 					<li>
 						<a
 							href={getConversationUrl(conv)}
@@ -99,11 +106,18 @@ Fetches friends and groups to populate the list.
 								? 'bg-blue-50'
 								: ''}"
 						>
-							<img
-								class="mr-4 h-12 w-12 rounded-full"
-								src={conv.avatar ?? `https://i.pravatar.cc/150?u=${conv.id}`}
-								alt="{conv.name}'s avatar"
-							/>
+							<div class="relative">
+								<img
+									class="mr-4 h-12 w-12 rounded-full"
+									src={conv.avatar ?? `https://i.pravatar.cc/150?u=${conv.id}`}
+									alt="{conv.name}'s avatar"
+								/>
+								{#if isOnline}
+									<span
+										class="absolute bottom-0 right-4 h-3 w-3 rounded-full bg-green-500 border-2 border-white"
+									></span>
+								{/if}
+							</div>
 							<div class="min-w-0 flex-1">
 								<p class="truncate font-semibold text-gray-800">{conv.name}</p>
 							</div>
