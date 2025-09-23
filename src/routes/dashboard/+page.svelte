@@ -8,6 +8,7 @@
     import { apiRequest } from '$lib/api';
     import { intersect } from '$lib/actions/intersect';
     import { websocketMessages } from '$lib/websocket';
+    import Skeleton from '$lib/components/ui/skeleton.svelte';
 
     let posts: any[] = [];
     let loadingPosts: boolean = true;
@@ -67,18 +68,16 @@
 <div class="flex min-h-screen flex-col bg-gray-100 font-sans">
 	<AppHeader />
 
-	<div class="flex flex-1 pt-14">
+	<div class="grid grid-cols-[auto_1fr_auto] flex-1 pt-14">
 		<!-- pt-14 to account for fixed header height -->
 		<!-- Left Sidebar -->
-		<aside
-			class="fixed top-14 left-0 hidden h-[calc(100vh-56px)] w-64 overflow-y-auto bg-white p-4 shadow-md md:block lg:w-72"
-		>
+		<aside class="sticky top-14 h-[calc(100vh-56px)] w-64 overflow-y-auto bg-white p-4 shadow-md hidden md:block lg:w-72">
 			<LeftSidebar />
 		</aside>
 
 		<!-- Main Content Area (News Feed) -->
-		<main class="flex-1 overflow-y-auto p-4 md:ml-64 lg:ml-72">
-			<div class="mx-auto max-w-2xl space-y-6">
+		<main class="overflow-y-auto p-4">
+			<div class="mx-auto max-w-2xl space-y-6 flex flex-col items-center">
 				<PostCreator on:postCreated={handlePostCreated} />
 				{#if posts.length > 0}
 					{#each posts as post (post.id)}
@@ -90,8 +89,28 @@
 					<div use:intersect on:intersect={loadMorePosts} class="h-10"></div>
 				{/if}
 
-				{#if loadingPosts}
-					<p>Loading posts...</p>
+								{#if loadingPosts}
+					{#each Array(3) as _, i (i)}
+						<div
+							class="w-full max-w-2xl mx-auto space-y-3 rounded-lg bg-white p-4 shadow-md"
+						>
+							<div class="flex items-center space-x-3">
+								<Skeleton class="h-10 w-10 rounded-full" />
+								<div class="space-y-2">
+									<Skeleton class="h-4 w-[200px]" />
+									<Skeleton class="h-4 w-[150px]" />
+								</div>
+							</div>
+							<div class="space-y-2">
+								<Skeleton class="h-4 w-full" />
+								<Skeleton class="h-4 w-[80%]" />
+							</div>
+							<div class="flex justify-between items-center pt-2">
+								<Skeleton class="h-8 w-24" />
+								<Skeleton class="h-8 w-24" />
+							</div>
+						</div>
+					{/each}
 				{/if}
 
 				{#if !hasMore && posts.length > 0}
@@ -109,9 +128,7 @@
 		</main>
 
 		<!-- Right Sidebar -->
-		<aside
-			class="fixed top-14 right-0 hidden h-[calc(100vh-56px)] w-72 overflow-y-auto bg-white p-4 shadow-md lg:block"
-		>
+		<aside class="sticky top-14 h-[calc(100vh-56px)] w-72 overflow-y-auto bg-white p-4 shadow-md hidden lg:block">
 			<RightSidebar />
 		</aside>
 	</div>

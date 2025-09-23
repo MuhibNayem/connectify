@@ -10,6 +10,11 @@
     let showNotifications = false;
     let notificationButton: HTMLElement;
     let notificationList: HTMLElement;
+    let mobileMenuOpen = false;
+
+    function toggleMobileMenu() {
+        mobileMenuOpen = !mobileMenuOpen;
+    }
 
     function handleSearchSubmit(event: CustomEvent<string>) {
         const query = event.detail;
@@ -45,6 +50,9 @@
 
 <header class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between h-14 px-4 bg-white shadow-md border-b border-gray-200">
     <div class="flex items-center space-x-4">
+        <Button variant="ghost" size="icon" class="md:hidden rounded-full hover:bg-gray-100" onclick={toggleMobileMenu}>
+            <span class="text-2xl">☰</span>
+        </Button>
         <a href="/dashboard" class="text-2xl font-bold text-indigo-600">Connectify</a>
         <div class="hidden md:block relative flex-grow max-w-md">
             <SearchInput on:search={handleSearchSubmit} />
@@ -86,4 +94,16 @@
         </Button>
         <Button variant="ghost" class="hidden sm:block" onclick={handleLogout}>Logout</Button>
     </div>
+
+    {#if mobileMenuOpen}
+        <div class="md:hidden fixed top-14 left-0 right-0 bottom-0 bg-white z-40 p-4">
+            <nav class="flex flex-col space-y-4">
+                <a href="/dashboard" class="text-lg font-medium text-gray-700 hover:text-indigo-600" on:click={() => mobileMenuOpen = false}>Dashboard</a>
+                <a href="/friends" class="text-lg font-medium text-gray-700 hover:text-indigo-600" on:click={() => mobileMenuOpen = false}>Friends</a>
+                <a href="/messages" class="text-lg font-medium text-gray-700 hover:text-indigo-600" on:click={() => mobileMenuOpen = false}>Messages</a>
+                <a href="/profile/{auth.state.user?.id}" class="text-lg font-medium text-gray-700 hover:text-indigo-600" on:click={() => mobileMenuOpen = false}>Profile</a>
+                <Button variant="ghost" class="w-full" on:click={handleLogout}>Logout</Button>
+            </nav>
+        </div>
+    {/if}
 </header>

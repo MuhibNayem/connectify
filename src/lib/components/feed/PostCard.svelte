@@ -65,7 +65,7 @@
 			if (event.type === 'ReactionCreated' && event.data.target_id === post.id) {
 				// post.specific_reaction_counts[event.data.type] =
 				// 	(post.specific_reaction_counts[event.data.type] || 0) + 1;
-				post.total_reactions += 1;
+				if (event.data.user_id != currentUserId) post.total_reactions += 1;
 
 				// Handle special case for "LIKE" reactions by the current user
 				if (event.data.user_id === currentUserId && event.data.type === 'LIKE') {
@@ -81,7 +81,8 @@
 				// 	0,
 				// 	(post.specific_reaction_counts[event.data.type] || 0) - 1
 				// );
-				post.total_reactions = Math.max(0, post.total_reactions - 1);
+				if (event.data.user_id != currentUserId)
+					post.total_reactions = Math.max(0, post.total_reactions - 1);
 
 				// If the deleted reaction was by the current user and was a "LIKE", reset the reaction ID
 				if (event.data.user_id === currentUserId && event.data.type === 'LIKE') {
@@ -142,7 +143,7 @@
 	}
 </script>
 
-<div class="space-y-3 rounded-lg bg-white p-4 shadow-md">
+<div class="w-full max-w-2xl mx-auto space-y-3 rounded-lg bg-white p-4 shadow-md">
 	<!-- Post Header -->
 	<div class="flex items-center space-x-3">
 		<Avatar class="h-10 w-10">

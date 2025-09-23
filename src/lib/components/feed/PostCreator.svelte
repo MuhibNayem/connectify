@@ -52,7 +52,7 @@
     }
 </script>
 
-<Card class="w-full max-w-2xl mx-auto">
+<Card class="w-full max-w-2xl">
     <CardHeader>
         <h2 class="text-xl font-semibold">Create New Post</h2>
     </CardHeader>

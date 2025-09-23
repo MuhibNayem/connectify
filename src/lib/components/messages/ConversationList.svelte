@@ -7,6 +7,7 @@ Fetches friends and groups to populate the list.
 	import { page } from '$app/stores';
 	import { getConversationSummaries, type ConversationSummary } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
+	import Skeleton from '$lib/components/ui/skeleton.svelte';
 
 	let conversations = $state<ConversationSummary[]>([]);
 	let isLoading = $state(true);
@@ -71,7 +72,17 @@ Fetches friends and groups to populate the list.
 	<!-- Conversation List -->
 	<div class="flex-1 overflow-y-auto">
 		{#if isLoading}
-			<div class="p-4 text-center text-gray-500">Loading chats...</div>
+			<div class="p-4 space-y-3">
+				{#each Array(5) as _, i (i)}
+					<div class="flex items-center space-x-3">
+						<Skeleton class="h-12 w-12 rounded-full" />
+						<div class="space-y-2 flex-1">
+							<Skeleton class="h-4 w-3/4" />
+							<Skeleton class="h-4 w-1/2" />
+						</div>
+					</div>
+				{/each}
+			</div>
 		{:else if error}
 			<div class="p-4 text-red-500">{error}</div>
 		{:else if conversations.length === 0}
