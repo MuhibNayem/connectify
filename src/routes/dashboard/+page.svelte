@@ -45,6 +45,16 @@
         }
     }
 
+    function handlePostUpdated(event: CustomEvent) {
+        const updatedPost = event.detail;
+        posts = posts.map(p => p.id === updatedPost.id ? updatedPost : p);
+    }
+
+    function handlePostDeleted(event: CustomEvent) {
+        const deletedPost = event.detail;
+        posts = posts.filter(p => p.id !== deletedPost.id);
+    }
+
     function loadMorePosts() {
         if (loadingPosts || !hasMore) return;
         fetchPosts(currentPage + 1);
@@ -56,6 +66,10 @@
         const unsubscribe = websocketMessages.subscribe((event) => {
             if (event && event.type === 'PostCreated') {
                 handlePostCreated({ detail: event.data } as CustomEvent);
+            } else if (event && event.type === 'PostUpdated') {
+                handlePostUpdated({ detail: event.data } as CustomEvent);
+            } else if (event && event.type === 'PostDeleted') {
+                handlePostDeleted({ detail: event.data } as CustomEvent);
             }
         });
 

@@ -143,7 +143,7 @@
 	}
 </script>
 
-<div class="w-full max-w-2xl mx-auto space-y-3 rounded-lg bg-white p-4 shadow-md">
+<div class="mx-auto w-full max-w-2xl space-y-3 rounded-lg bg-white p-4 shadow-md">
 	<!-- Post Header -->
 	<div class="flex items-center space-x-3">
 		<Avatar class="h-10 w-10">
@@ -156,7 +156,8 @@
 		<div>
 			<p class="font-semibold text-gray-900">{post.author.full_name || post.author.username}</p>
 			<p class="text-xs text-gray-500">
-				{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+				{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })} •
+				<span class="capitalize">{post.privacy.replace('_', ' ').toLowerCase()}</span>
 			</p>
 		</div>
 	</div>
