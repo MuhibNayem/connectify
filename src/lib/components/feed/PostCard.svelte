@@ -19,6 +19,7 @@
 		};
 		content: string;
 		media?: { url: string; type: string }[];
+		location?: string;
 		privacy: string;
 		comments: any[];
 		mentions: string[];
@@ -162,7 +163,22 @@
 			<AvatarFallback>{post.author?.username?.charAt(0).toUpperCase()}</AvatarFallback>
 		</Avatar>
 		<div>
-			<p class="font-semibold text-gray-900">{post.author.full_name || post.author.username}</p>
+			<div class="flex items-center space-x-1">
+				<p class="font-semibold text-gray-900 dark:text-white">
+					{post.author.username}
+					<!-- Use username for now as Full Name might not be populated or same -->
+				</p>
+				{#if post.mentions && post.mentions.length > 0}
+					<span class="font-normal text-gray-500 dark:text-gray-400">with</span>
+					<span class="font-medium text-gray-900 dark:text-white">
+						{post.mentions.length} people
+					</span>
+				{/if}
+				{#if post.location}
+					<span class="font-normal text-gray-500 dark:text-gray-400">is at</span>
+					<span class="font-medium text-gray-900 dark:text-white">{post.location}</span>
+				{/if}
+			</div>
 			<p class="text-xs text-gray-500">
 				{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })} •
 				<span class="capitalize">{post.privacy.replace('_', ' ').toLowerCase()}</span>

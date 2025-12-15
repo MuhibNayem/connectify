@@ -23,6 +23,9 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      emoji-picker-element:
+        specifier: ^1.28.0
+        version: 1.28.0
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.1.1)
@@ -1114,6 +1117,9 @@ packages:
 
   devalue@5.3.2:
     resolution: {integrity: sha512-UDsjUbpQn9kvm68slnrs+mfxwFkIflOhkanmyabZ8zOYk8SMEIbJ3TK+88g70hSIeytu4y18f0z/hYHMTrXIWw==}
+
+  emoji-picker-element@1.28.0:
+    resolution: {integrity: sha512-gzRyaxUQKfnEt7xURdbyEGd+ifRy9FiIgU6I9ovABDOW6n4YrUZBAnYjP00BmVBiH1uxCkaUOrutbzTswCXSkw==}
 
   enhanced-resolve@5.18.3:
     resolution: {integrity: sha512-d4lC8xfavMeBjzGr2vECC3fsGXziXZQyJxD868h2M/mBI3PwAuODxAkLkq5HYuvrPYcUtiLzsTo8U3PgX3Ocww==}
@@ -2739,6 +2745,8 @@ snapshots:
   detect-node-es@1.1.0: {}
 
   devalue@5.3.2: {}
+
+  emoji-picker-element@1.28.0: {}
 
   enhanced-resolve@5.18.3:
     dependencies:
