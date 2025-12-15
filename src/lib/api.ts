@@ -2,7 +2,7 @@ import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { auth } from './stores/auth.svelte';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'; // Backend API URL
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'; // Backend API URL
 
 // --- Backend Model Interfaces ---
 
@@ -164,9 +164,11 @@ export async function apiRequest(
 	data?: any,
 	requiresAuth: boolean = true
 ): Promise<any> {
-	const headers: HeadersInit = {
-		'Content-Type': 'application/json'
-	};
+	const headers: HeadersInit = {};
+
+	if (!(data instanceof FormData)) {
+		headers['Content-Type'] = 'application/json';
+	}
 
 	if (requiresAuth && auth.state.accessToken) {
 		headers['Authorization'] = `Bearer ${auth.state.accessToken}`;
@@ -175,7 +177,7 @@ export async function apiRequest(
 	const config: RequestInit = {
 		method: method,
 		headers: headers,
-		body: data ? JSON.stringify(data) : undefined
+		body: data instanceof FormData ? data : (data ? JSON.stringify(data) : undefined)
 	};
 
 	try {
@@ -300,15 +302,16 @@ export async function sendMessage(payload: MessageRequest): Promise<Message> {
 	return apiRequest('POST', '/messages', payload, true);
 }
 
-	export async function markMessagesAsSeen(messageIds: string[]): Promise<void> {
-		await apiRequest('POST', '/messages/seen', messageIds, true);
-	}
+export async function markMessagesAsSeen(messageIds: string[]): Promise<void> {
+	await apiRequest('POST', '/messages/seen', messageIds, true);
+}
 
-	export async function markMessagesAsDelivered(messageIds: string[]): Promise<void> {
-		await apiRequest('POST', '/messages/delivered', messageIds, true);
-	}
+export async function markMessagesAsDelivered(messageIds: string[]): Promise<void> {
+	await apiRequest('POST', '/messages/delivered', messageIds, true);
+}
 
-	export async function getUnreadMessageCount(): Promise<UnreadCountResponse> {	return apiRequest('GET', '/messages/unread', undefined, true);
+export async function getUnreadMessageCount(): Promise<UnreadCountResponse> {
+	return apiRequest('GET', '/messages/unread', undefined, true);
 }
 
 export async function deleteMessage(messageId: string): Promise<SuccessResponse> {
@@ -370,7 +373,7 @@ export async function updateGroup(groupId: string, payload: UpdateGroupRequest):
 
 // Keep existing functions that are not directly covered by the new API spec or are client-specific
 export async function register(userData: any): Promise<any> {
-    return apiRequest('POST', '/auth/register', userData, false);
+	return apiRequest('POST', '/auth/register', userData, false);
 }
 
 

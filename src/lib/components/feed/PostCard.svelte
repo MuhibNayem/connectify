@@ -18,8 +18,7 @@
 			full_name?: string;
 		};
 		content: string;
-		media_type?: string;
-		media_url?: string;
+		media?: { url: string; type: string }[];
 		privacy: string;
 		comments: any[];
 		mentions: string[];
@@ -164,6 +163,62 @@
 
 	<!-- Post Content -->
 	<p class="leading-relaxed text-gray-800">{post.content}</p>
+
+	<!-- Media Grid -->
+	{#if post.media && post.media.length > 0}
+		{@const mediaCount = post.media.length}
+		{@const displayMedia = post.media.slice(0, 4)}
+		<!-- Show max 4 items -->
+		{@const remainingCount = mediaCount > 4 ? mediaCount - 3 : 0}
+		<!-- If >4, we show 3 and the 4th has the overlay -->
+
+		<div
+			class={`mt-3 grid gap-1 overflow-hidden rounded-xl ${
+				mediaCount === 1
+					? 'h-[300px] grid-cols-1'
+					: mediaCount === 2
+						? 'h-[250px] grid-cols-2'
+						: mediaCount === 3
+							? 'h-[400px] grid-rows-2'
+							: 'h-[400px] grid-cols-2 grid-rows-2' // 4 or more
+			}`}
+		>
+			{#each displayMedia as item, i}
+				{@const isLastItem = i === 3}
+				{@const isOverlayNeeded = mediaCount > 4 && isLastItem}
+
+				<!-- Grid Spanning Logic -->
+				<!-- 3 items: First item takes full width of first row (col-span-2) -->
+				<div
+					class={`relative overflow-hidden bg-gray-100 dark:bg-gray-900 ${
+						mediaCount === 3 && i === 0 ? 'col-span-2 row-span-1' : ''
+					} ${
+						/* Image/Video sizing */
+						'h-full w-full'
+					}`}
+				>
+					{#if item.type === 'image' || item.type?.startsWith('image')}
+						<img
+							src={item.url}
+							alt="Post media"
+							class="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+						/>
+					{:else if item.type === 'video' || item.type?.startsWith('video')}
+						<video src={item.url} controls class="h-full w-full object-cover"></video>
+					{/if}
+
+					<!-- Overflow Overlay -->
+					{#if isOverlayNeeded}
+						<div
+							class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/60 transition-colors hover:bg-black/70"
+						>
+							<span class="text-3xl font-bold text-white">+{mediaCount - 3}</span>
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Post Actions (Likes, Comments Count) -->
 	<div
