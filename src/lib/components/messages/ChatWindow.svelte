@@ -12,6 +12,7 @@ It orchestrates the display of messages and the message input field.
 		type ConversationSummary,
 		markConversationAsSeen
 	} from '$lib/api';
+	import type { Message as MessageModel } from '$lib/types';
 	import { formatDistanceToNow } from 'date-fns';
 	import Message from './Message.svelte';
 	import MessageInput from './MessageInput.svelte';
@@ -119,56 +120,80 @@ It orchestrates the display of messages and the message input field.
 		}, 3000); // Hide after 3 seconds of no new typing events
 	}
 
-	async function handleSendMessage(content: string) {
-		if (!content.trim() || isSending) return;
+	async function handleSendMessage(content: string, files: File[] = []) {
+		if ((!content.trim() && files.length === 0) || isSending) return;
 
 		isSending = true;
 
 		const [type, id] = conversationId.split('-');
-		let payload: any = {
-			content: content,
-			content_type: 'text' // Default to text
-		};
 
-		if (type === 'group') {
-			payload.group_id = id;
-		} else if (type === 'user') {
-			payload.receiver_id = id;
-		} else {
-			console.error('Invalid conversation ID format.');
-			isSending = false;
-			return;
-		}
-
-		// Optimistically add message with a temporary ID
+		// Optimistically add message
 		const tempId = `temp-${Date.now()}`;
-		const optimisticMessage: Message = {
+		const optimisticMessage: MessageModel = {
 			id: tempId,
 			sender_id: auth.state.user?.id || '',
 			sender_name: auth.state.user?.username || 'You',
 			content: content,
-			content_type: 'text',
+			content_type:
+				files.length > 0
+					? files.length > 1
+						? 'multiple'
+						: files[0].type.startsWith('image/')
+							? 'image'
+							: files[0].type.startsWith('video/')
+								? 'video'
+								: 'file'
+					: 'text',
+			media_urls: files.length > 0 ? files.map((f) => URL.createObjectURL(f)) : undefined,
 			created_at: new Date().toISOString(),
 			is_deleted: false,
 			is_edited: false,
 			seen_by: [],
 			delivered_to: [],
-			// Add other fields as necessary, e.g., receiver_id or group_id
+			_optimistic_files: files,
 			...(type === 'user' && { receiver_id: id }),
 			...(type === 'group' && { group_id: id })
 		};
 		messages.push(optimisticMessage);
-		content = ''; // Clear input immediately
 
 		try {
+			let payload: any;
+
+			if (files.length > 0) {
+				const formData = new FormData();
+				formData.append('content', content);
+				// Default content type if mixed, backend will refine
+				formData.append('content_type', 'text');
+
+				if (type === 'group') {
+					formData.append('group_id', id);
+				} else {
+					formData.append('receiver_id', id);
+				}
+
+				files.forEach((file) => {
+					formData.append('files', file);
+				});
+
+				payload = formData;
+			} else {
+				payload = {
+					content: content,
+					content_type: 'text'
+				};
+				if (type === 'group') {
+					payload.group_id = id;
+				} else {
+					payload.receiver_id = id;
+				}
+			}
+
 			const serverMessage = await sendMessage(payload);
-			// Replace optimistic message with server-returned message
+			// Replace optimistic message
 			messages = messages.map((msg) => (msg.id === tempId ? serverMessage : msg));
 		} catch (e) {
 			console.error('Send message failed:', e);
-			// Remove optimistic message if send failed
 			messages = messages.filter((msg) => msg.id !== tempId);
-			// Optionally, show a 'failed to send' status for the message
 		} finally {
 			isSending = false;
 		}

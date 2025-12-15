@@ -15,6 +15,8 @@ export interface Message {
 	content_type: string;
 	media_urls?: string[];
 	seen_by?: string[];
+	delivered_to?: string[];
+	_optimistic_files?: File[];
 	is_deleted: boolean;
 	deleted_at?: string;
 	is_edited?: boolean; // Added
@@ -58,4 +60,4 @@ export interface MessageEditedEvent {
 	edited_at: string;
 }
 
-export interface MessageCreatedEvent extends Message {}
+export interface MessageCreatedEvent extends Message { }

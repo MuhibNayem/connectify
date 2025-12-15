@@ -298,7 +298,7 @@ export async function getMessages(params: { receiverID?: string; groupID?: strin
 	return apiRequest('GET', `/messages?${query.toString()}`, undefined, true);
 }
 
-export async function sendMessage(payload: MessageRequest): Promise<Message> {
+export async function sendMessage(payload: MessageRequest | FormData): Promise<Message> {
 	return apiRequest('POST', '/messages', payload, true);
 }
 
