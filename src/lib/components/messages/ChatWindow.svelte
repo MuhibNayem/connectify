@@ -198,8 +198,23 @@ It orchestrates the display of messages and the message input field.
 			}
 
 			const serverMessage = await sendMessage(payload);
-			// Replace optimistic message
-			messages = messages.map((msg) => (msg.id === tempId ? serverMessage : msg));
+
+			// Immediately emit a local event for ConversationList to update
+			// This ensures the conversation moves to top instantly.
+			// NOTE: This also triggers our own subscription to websocketMessages!
+			websocketMessages.set({
+				type: 'MESSAGE_CREATED',
+				data: serverMessage
+			});
+
+			// Prevent duplicates:
+			// If message was added by the subscription above (or real WS race), we just remove tempId.
+			// Otherwise, we replace tempId with serverMessage.
+			if (messages.some((m) => m.id === serverMessage.id)) {
+				messages = messages.filter((msg) => msg.id !== tempId);
+			} else {
+				messages = messages.map((msg) => (msg.id === tempId ? serverMessage : msg));
+			}
 		} catch (e) {
 			console.error('Send message failed:', e);
 			messages = messages.filter((msg) => msg.id !== tempId);
@@ -226,6 +241,7 @@ It orchestrates the display of messages and the message input field.
 			case 'MESSAGE_CREATED': {
 				const newMessage = event.data;
 				console.log('MESSAGE_CREATED event received:', newMessage);
+
 				// Check if the new message belongs to the current conversation
 				let belongsToCurrentChat = false;
 				if (type === 'group' && newMessage.group_id === currentChatId) {
@@ -240,81 +256,133 @@ It orchestrates the display of messages and the message input field.
 				console.log('Message belongs to current chat:', belongsToCurrentChat);
 
 				if (belongsToCurrentChat) {
+					// Check if message already exists in array (basic safety)
 					const messageExists = messages.find((m) => m.id === newMessage.id);
-					console.log('Message already exists:', messageExists);
+					console.log('Message already exists in array:', !!messageExists);
+
 					if (!messageExists) {
-						messages.push(newMessage);
-						console.log('New message pushed to array:', newMessage);
+						// Immutable push
+						messages = [...messages, newMessage];
+						console.log('✓ New message added to array:', newMessage.id);
 					}
 				}
 				break;
 			}
+			case 'MESSAGE_DELETED': {
+				const deletedMessage = event.data;
+				messages = messages.map((m) => {
+					if (m.id === deletedMessage.id) {
+						return {
+							...m,
+							content: '[deleted]',
+							content_type: 'deleted',
+							is_deleted: true,
+							media_urls: []
+						};
+					}
+					return m;
+				});
+				break;
+			}
 			case 'MESSAGE_EDITED_UPDATE': {
 				const { message_id, new_content } = event.data;
-				const messageIndex = messages.findIndex((m) => m.id === message_id);
-				if (messageIndex !== -1) {
-					messages[messageIndex].content = new_content;
-					messages[messageIndex].is_edited = true;
-				}
+				console.log('MESSAGE_EDITED_UPDATE event received:', new_content);
+				messages = messages.map((m) => {
+					if (m.id === message_id) {
+						return {
+							...m,
+							content: new_content,
+							is_edited: true
+						};
+					}
+					return m;
+				});
 				break;
 			}
 			case 'MESSAGE_REACTION_UPDATE': {
 				const { message_id, user_id, emoji, action } = event.data;
-				const messageIndex = messages.findIndex((m) => m.id === message_id);
-				if (messageIndex === -1) return;
 
-				if (!messages[messageIndex].reactions) {
-					messages[messageIndex].reactions = [];
-				}
+				messages = messages.map((m) => {
+					if (m.id === message_id) {
+						const currentReactions = m.reactions || [];
 
-				const existingReactionIndex = messages[messageIndex].reactions.findIndex(
-					(r: any) => r.user_id === user_id && r.emoji === emoji
-				);
-
-				if (action === 'add' && existingReactionIndex === -1) {
-					messages[messageIndex].reactions.push({
-						user_id,
-						emoji,
-						timestamp: new Date().toISOString()
-					});
-				} else if (action === 'remove' && existingReactionIndex !== -1) {
-					messages[messageIndex].reactions.splice(existingReactionIndex, 1);
-				}
+						if (action === 'add') {
+							// Check if already exists to avoid duplicates
+							if (currentReactions.some((r: any) => r.user_id === user_id && r.emoji === emoji)) {
+								return m;
+							}
+							return {
+								...m,
+								reactions: [
+									...currentReactions,
+									{ user_id, emoji, timestamp: new Date().toISOString() }
+								]
+							};
+						} else if (action === 'remove') {
+							return {
+								...m,
+								reactions: currentReactions.filter(
+									(r: any) => !(r.user_id === user_id && r.emoji === emoji)
+								)
+							};
+						}
+					}
+					return m;
+				});
 				break;
 			}
 			case 'CONVERSATION_SEEN_UPDATE': {
 				const { conversation_id, user_id, timestamp, is_group } = event.data;
 				const [type, id] = conversationId.split('-');
-				// For DMs: conversation_id is the OTHER person's ID
-				// If I'm viewing chat with X (conversationId = "user-X"), and X marks messages as seen,
-				// the event has conversation_id = my_id, user_id = X
-				// So we need to match if: id === conversation_id (I marked as seen on X's chat)
-				// OR: id === user_id (X marked as seen on my chat)
+
+				// Check relevance: matched group ID OR matched user ID (for DMs)
 				const isRelevant = id === conversation_id || (!is_group && id === user_id);
+
 				if (isRelevant) {
-					messages.forEach((msg) => {
-						if (new Date(msg.created_at) <= new Date(timestamp)) {
-							if (!msg.seen_by) msg.seen_by = [];
-							if (!msg.seen_by.includes(user_id)) {
-								msg.seen_by.push(user_id);
-							}
+					const seenTime = new Date(timestamp).getTime();
+					messages = messages.map((msg) => {
+						// Update if message is older/equal to seen timestamp AND not yet seen by this user
+						if (new Date(msg.created_at).getTime() <= seenTime) {
+							if (msg.seen_by?.includes(user_id)) return msg;
+
+							return {
+								...msg,
+								seen_by: [...(msg.seen_by || []), user_id]
+							};
 						}
+						return msg;
 					});
-					messages = [...messages]; // Trigger Svelte reactivity
 				}
 				break;
 			}
 			case 'MESSAGE_DELIVERED_UPDATE': {
 				const { message_ids, deliverer_id } = event.data;
-				messages.forEach((msg) => {
+				messages = messages.map((msg) => {
 					if (message_ids.includes(msg.id)) {
-						if (!msg.delivered_to) msg.delivered_to = [];
-						if (!msg.delivered_to.includes(deliverer_id)) {
-							msg.delivered_to.push(deliverer_id);
-						}
+						if (msg.delivered_to?.includes(deliverer_id)) return msg;
+
+						return {
+							...msg,
+							delivered_to: [...(msg.delivered_to || []), deliverer_id]
+						};
 					}
+					return msg;
 				});
-				messages = [...messages]; // Trigger Svelte reactivity
+				break;
+			}
+			case 'MESSAGE_READ_UPDATE': {
+				const { message_ids, reader_id } = event.data;
+				messages = messages.map((msg) => {
+					if (message_ids.includes(msg.id)) {
+						if (msg.seen_by?.includes(reader_id)) return msg;
+
+						return {
+							...msg,
+							seen_by: [...(msg.seen_by || []), reader_id]
+						};
+					}
+					return msg;
+				});
 				break;
 			}
 			case 'TYPING': {
@@ -360,6 +428,22 @@ It orchestrates the display of messages and the message input field.
 			// Use current time to mark ALL messages in the conversation as seen up to now
 			markConversationAsSeen(conversationId, new Date().toISOString(), type === 'group');
 		}, 500);
+	}
+
+	function handleMessageDeleted(event: CustomEvent) {
+		const deletedMsgId = event.detail.id;
+		messages = messages.map((m) => {
+			if (m.id === deletedMsgId) {
+				return {
+					...m,
+					content: '[deleted]',
+					content_type: 'deleted',
+					is_deleted: true,
+					media_urls: []
+				};
+			}
+			return m;
+		});
 	}
 </script>
 
@@ -411,7 +495,11 @@ It orchestrates the display of messages and the message input field.
 		{:else}
 			{#each messages as message (message.id)}
 				<div use:trackVisibility={{ onVisible: () => handleMessageVisible(message) }}>
-					<Message {message} on:rendered={handleMessageRendered} />
+					<Message
+						{message}
+						on:rendered={handleMessageRendered}
+						on:deleted={handleMessageDeleted}
+					/>
 				</div>
 			{/each}
 

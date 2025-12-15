@@ -8,6 +8,8 @@ It styles messages differently based on whether they were sent by the current us
 	import { auth } from '$lib/stores/auth.svelte';
 	import { lightbox } from '$lib/stores/lightbox.svelte';
 	import type { Message } from '$lib/types';
+	import MessageActions from './MessageActions.svelte';
+	import MessageReactions from './MessageReactions.svelte';
 
 	export let message: Message;
 
@@ -101,70 +103,43 @@ It styles messages differently based on whether they were sent by the current us
 				>{new Date(message.created_at).toLocaleTimeString()}</span
 			>
 			{#if isMe}
-				{#if message.seen_by && message.seen_by.length > 0}
-					<!-- Blue double tick for seen -->
-					<svg
-						width="24px"
-						height="24px"
-						viewBox="0 0 16 16"
-						xmlns="http://www.w3.org/2000/svg"
-						version="1.1"
-						fill="none"
-						stroke="#7a72e3"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g
-							id="SVGRepo_tracerCarrier"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						></g><g id="SVGRepo_iconCarrier">
-							<path d="m1.75 9.75 2.5 2.5m3.5-4 2.5-2.5m-4.5 4 2.5 2.5 6-6.5"></path>
-						</g></svg
-					>
-				{:else if message.delivered_to && message.delivered_to.length > 0}
-					<!-- Grey double tick for delivered -->
-					<svg
-						width="24px"
-						height="24px"
-						viewBox="0 0 16 16"
-						xmlns="http://www.w3.org/2000/svg"
-						version="1.1"
-						fill="none"
-						stroke="#8b8989"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g
-							id="SVGRepo_tracerCarrier"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						></g><g id="SVGRepo_iconCarrier">
-							<path d="m1.75 9.75 2.5 2.5m3.5-4 2.5-2.5m-4.5 4 2.5 2.5 6-6.5"></path>
-						</g></svg
-					>
+				{#if message.id.startsWith('temp-')}
+					<!-- Sending (Hollow circle) -->
+					<div class="h-4 w-4 rounded-full border-2 border-gray-400"></div>
 				{:else}
-					<!-- Single tick for sent -->
-					<svg
-						width="20px"
-						height="20px"
-						viewBox="0 0 24 24"
-						fill="none"
-						xmlns="http://www.w3.org/2000/svg"
-						><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g
-							id="SVGRepo_tracerCarrier"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						></g><g id="SVGRepo_iconCarrier">
+					{@const otherSeenCount =
+						message.seen_by?.filter((id) => id !== auth.state.user?.id).length || 0}
+					{@const otherDeliveredCount =
+						message.delivered_to?.filter((id) => id !== auth.state.user?.id).length || 0}
+
+					{#if otherSeenCount > 0}
+						<!-- Seen (Blue filled check or Avatar) -->
+						<!-- FB style is avatar, but we'll use filled blue check for clarity across group/dm for now -->
+						<svg class="h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
 							<path
-								d="M4.89163 13.2687L9.16582 17.5427L18.7085 8"
-								stroke="#000000"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							></path>
-						</g></svg
-					>
+								d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+							/>
+						</svg>
+					{:else if otherDeliveredCount > 0}
+						<!-- Delivered (Grey filled check) -->
+						<svg class="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+							<path
+								d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+							/>
+						</svg>
+					{:else}
+						<!-- Sent (Hollow circle with check) -->
+						<svg
+							class="h-4 w-4 text-gray-400"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<circle cx="12" cy="12" r="10" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="M8 12l2 2 4-4" />
+						</svg>
+					{/if}
 				{/if}
 			{/if}
 		</div>
@@ -332,18 +307,25 @@ It styles messages differently based on whether they were sent by the current us
 				{/if}
 			{/if}
 		</div>
-		<div class="mt-1 flex items-center space-x-2" class:justify-end={isMe}>
-			{#if message.is_edited}
-				<span class="text-xs font-normal text-gray-400">Edited</span>
-			{/if}
-			{#if message.reactions && message.reactions.length > 0}
-				<div class="flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-					{#each message.reactions as reaction}
-						<span>{reaction.emoji}</span>
-					{/each}
-					<span class="ml-1 text-xs text-gray-600">{message.reactions.length}</span>
-				</div>
-			{/if}
+		<div class="mt-1 flex items-center justify-between gap-2">
+			<div class="flex items-center gap-2" class:flex-row-reverse={isMe}>
+				{#if message.is_edited}
+					<span class="text-xs font-normal text-gray-400">Edited</span>
+				{/if}
+
+				<!-- Display reactions using the new component -->
+				<MessageReactions reactions={message.reactions || []} messageId={message.id} />
+			</div>
+
+			<!-- Message Actions (Edit/Delete/React) -->
+			<MessageActions
+				messageId={message.id}
+				messageContent={message.content || ''}
+				messageSenderId={message.sender_id}
+				messageCreatedAt={message.created_at}
+				onEdited={(newContent) => (message.content = newContent)}
+				on:deleted={() => dispatch('deleted', { id: message.id })}
+			/>
 		</div>
 	</div>
 </div>

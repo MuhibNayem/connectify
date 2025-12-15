@@ -12,6 +12,7 @@ Fetches friends and groups to populate the list.
 	import { formatDistanceToNow } from 'date-fns';
 	import CreateGroupModal from './CreateGroupModal.svelte';
 	import { Plus } from '@lucide/svelte';
+	import { websocketMessages } from '$lib/websocket';
 
 	let conversations = $state<ConversationSummary[]>([]);
 	let isLoading = $state(true);
@@ -21,6 +22,68 @@ Fetches friends and groups to populate the list.
 
 	presenceStore.subscribe((value) => {
 		presenceState = value;
+	});
+
+	// Subscribe to WebSocket messages for real-time updates
+	websocketMessages.subscribe((event) => {
+		if (!event) return;
+
+		switch (event.type) {
+			case 'MESSAGE_CREATED': {
+				const newMessage = event.data;
+				// Update the conversation's last message and timestamp
+				conversations = conversations.map((conv) => {
+					let shouldUpdate = false;
+
+					// Check if message belongs to this conversation
+					if (conv.is_group && newMessage.group_id === conv.id) {
+						shouldUpdate = true;
+					} else if (!conv.is_group) {
+						// For direct messages, check if either sender or receiver is this conversation
+						if (newMessage.sender_id === conv.id || newMessage.receiver_id === conv.id) {
+							shouldUpdate = true;
+						}
+					}
+
+					if (shouldUpdate) {
+						// Update last message info
+						return {
+							...conv,
+							last_message_content: newMessage.content || 'Sent a file',
+							last_message_timestamp: newMessage.created_at,
+							last_message_sender_id: newMessage.sender_id,
+							last_message_sender_name: newMessage.sender_name,
+							// Increment unread count if message is from someone else, reset to 0 if from current user
+							unread_count:
+								newMessage.sender_id !== auth.state.user?.id ? (conv.unread_count || 0) + 1 : 0
+						};
+					}
+					return conv;
+				});
+
+				// Re-sort conversations by timestamp
+				conversations = conversations.sort((a, b) => {
+					const timeA = a.last_message_timestamp ? new Date(a.last_message_timestamp).getTime() : 0;
+					const timeB = b.last_message_timestamp ? new Date(b.last_message_timestamp).getTime() : 0;
+					return timeB - timeA;
+				});
+				break;
+			}
+			case 'CONVERSATION_SEEN_UPDATE': {
+				// Reset unread count for the conversation that was marked as seen
+				const { conversation_id, user_id } = event.data;
+				// Only reset if the current user marked it as seen
+				if (user_id === auth.state.user?.id) {
+					conversations = conversations.map((conv) => {
+						if (conv.id === conversation_id) {
+							return { ...conv, unread_count: 0 };
+						}
+						return conv;
+					});
+				}
+				break;
+			}
+		}
 	});
 
 	onMount(async () => {
@@ -109,7 +172,16 @@ Fetches friends and groups to populate the list.
 								{/if}
 							</div>
 							<div class="min-w-0 flex-1">
-								<p class="truncate font-semibold text-gray-800">{conv.name}</p>
+								<div class="flex items-center justify-between">
+									<p class="truncate font-semibold text-gray-800">{conv.name}</p>
+									{#if conv.unread_count > 0}
+										<span
+											class="ml-2 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white"
+										>
+											{conv.unread_count > 99 ? '99+' : conv.unread_count}
+										</span>
+									{/if}
+								</div>
 								{#if conv.last_message_content}
 									<div class="flex items-center text-sm text-gray-500">
 										<p class="max-w-[140px] truncate">

@@ -61,6 +61,7 @@ export interface ConversationSummary {
 	last_message_timestamp?: string;
 	last_message_sender_id?: string;
 	last_message_sender_name?: string;
+	unread_count: number;
 }
 
 export type FriendshipStatus = 'pending' | 'accepted' | 'rejected' | 'blocked';
