@@ -374,6 +374,39 @@ export async function markConversationAsSeen(conversationId: string, timestamp: 
 	await apiRequest('POST', `/conversations/${id}/seen`, { timestamp, is_group: isGroup }, true);
 }
 
+export interface GroupResponse {
+	id: string;
+	name: string;
+	creator: UserShortResponse;
+	members: UserShortResponse[];
+	pending_members?: UserShortResponse[];
+	admins: UserShortResponse[];
+	settings?: GroupSettings;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface GroupSettings {
+	requires_approval: boolean;
+}
+
+export interface CreateGroupRequest {
+	name: string;
+	member_ids: string[];
+}
+
+export interface AddMemberRequest {
+	user_id: string;
+}
+
+export interface UpdateGroupRequest {
+	name?: string;
+}
+
+export interface UpdateGroupSettingsRequest {
+	requires_approval: boolean;
+}
+
 export async function createGroup(payload: CreateGroupRequest): Promise<GroupResponse> {
 	return apiRequest('POST', '/groups', payload, true);
 }
@@ -382,12 +415,24 @@ export async function getGroupDetails(groupId: string): Promise<GroupResponse> {
 	return apiRequest('GET', `/groups/${groupId}`, undefined, true);
 }
 
-export async function addMemberToGroup(groupId: string, userId: string): Promise<void> {
-	return apiRequest('POST', `/groups/${groupId}/members`, { user_id: userId }, true);
+export async function inviteMemberToGroup(groupId: string, userId: string): Promise<void> {
+	return apiRequest('POST', `/groups/${groupId}/invite`, { user_id: userId }, true);
+}
+
+export async function approveGroupMember(groupId: string, userId: string): Promise<void> {
+	return apiRequest('POST', `/groups/${groupId}/approve`, { user_id: userId }, true);
+}
+
+export async function rejectGroupMember(groupId: string, userId: string): Promise<void> {
+	return apiRequest('POST', `/groups/${groupId}/reject`, { user_id: userId }, true);
 }
 
 export async function addAdminToGroup(groupId: string, userId: string): Promise<void> {
 	return apiRequest('POST', `/groups/${groupId}/admins`, { user_id: userId }, true);
+}
+
+export async function removeAdminFromGroup(groupId: string, userId: string): Promise<void> {
+	return apiRequest('DELETE', `/groups/${groupId}/admins/${userId}`, undefined, true);
 }
 
 export async function removeMemberFromGroup(groupId: string, userId: string): Promise<void> {
@@ -398,9 +443,31 @@ export async function updateGroup(groupId: string, payload: UpdateGroupRequest):
 	return apiRequest('PUT', `/groups/${groupId}`, payload, true);
 }
 
+export async function updateGroupSettings(groupId: string, settings: UpdateGroupSettingsRequest): Promise<void> {
+	return apiRequest('PUT', `/groups/${groupId}/settings`, settings, true);
+}
+
 // Keep existing functions that are not directly covered by the new API spec or are client-specific
 export async function register(userData: any): Promise<any> {
 	return apiRequest('POST', '/auth/register', userData, false);
 }
 
+// Note: updateUserProfile returns the updated user object
+export async function updateUserProfile(data: any): Promise<import('$lib/types').User> {
+	return apiRequest('PUT', '/users/me', data, true);
+}
+
+export async function updatePrivacySettings(data: any): Promise<void> {
+	return apiRequest('PUT', '/users/me/privacy', data, true);
+}
+
+export async function updateNotificationSettings(data: any): Promise<void> {
+	return apiRequest('PUT', '/users/me/notifications', data, true);
+}
+
+export async function uploadFiles(files: File[]): Promise<{ url: string; type: string }[]> {
+	const formData = new FormData();
+	files.forEach((f) => formData.append('files[]', f));
+	return apiRequest('POST', '/upload', formData, true);
+}
 

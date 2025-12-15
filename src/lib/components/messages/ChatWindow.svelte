@@ -21,8 +21,13 @@ It orchestrates the display of messages and the message input field.
 	import { presenceStore, type PresenceState } from '$lib/stores/presence';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import { trackVisibility } from '$lib/actions/trackVisibility';
+	import GroupInfoModal from './GroupInfoModal.svelte';
+
+	let showGroupInfo = $state(false);
 
 	let { conversationId } = $props<{ conversationId: string }>();
+
+	let currentChatId = $derived(conversationId.split('-')[1]);
 
 	let messages = $state<any[]>([]);
 	let isLoading = $state(true);
@@ -481,10 +486,43 @@ It orchestrates the display of messages and the message input field.
 					</p>
 				{/if}
 			</div>
+
+			{#if conversationPartner.is_group}
+				<div class="ml-auto">
+					<button
+						class="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+						onclick={() => (showGroupInfo = true)}
+						aria-label="Group Info"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							class="h-6 w-6"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0Z"
+							/>
+						</svg>
+					</button>
+				</div>
+			{/if}
 		{:else}
 			<h2 class="text-lg font-bold">Chat</h2>
 		{/if}
 	</header>
+
+	{#if showGroupInfo}
+		<GroupInfoModal
+			showModal={showGroupInfo}
+			groupId={currentChatId}
+			onClose={() => (showGroupInfo = false)}
+		/>
+	{/if}
 
 	<!-- Message Display Area -->
 	<div bind:this={chatContainer} class="flex-1 overflow-y-auto bg-gray-50 p-4">

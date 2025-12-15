@@ -153,6 +153,14 @@ export const auth = {
             return false;
         }
     },
+
+    // Update user method
+    updateUser: (userData: Partial<User>) => {
+        if (authState.user) {
+            authState.user = { ...authState.user, ...userData };
+            persistState();
+        }
+    }
 };
 
 // Initialize on module load

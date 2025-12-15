@@ -67,5 +67,31 @@ export interface User {
 	username: string;
 	email: string;
 	avatar?: string;
+	cover_picture?: string;
 	full_name?: string;
+	bio?: string;
+	location?: string;
+	phone_number?: string;
+	date_of_birth?: string;
+	gender?: string;
+	privacy_settings?: PrivacySettings;
+	notification_settings?: NotificationSettings;
+	created_at?: string;
+}
+
+export interface PrivacySettings {
+	default_post_privacy: string;
+	can_see_my_friends_list: string;
+	can_send_me_friend_requests: string;
+	can_tag_me_in_posts: string;
+}
+
+export interface NotificationSettings {
+	email_notifications: boolean;
+	push_notifications: boolean;
+	notify_on_friend_request: boolean;
+	notify_on_comment: boolean;
+	notify_on_like: boolean;
+	notify_on_tag: boolean;
+	notify_on_message: boolean;
 }
