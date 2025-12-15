@@ -30,7 +30,9 @@
 		total_comments: number;
 	};
 
-	let showComments = false;
+	export let isDetailedView = false;
+
+	let showComments = isDetailedView;
 
 	// Reactive user ID from the new auth store
 	$: currentUserId = auth.state.user?.id;
@@ -140,6 +142,13 @@
 	function handleShare() {
 		alert(`Sharing post by ${post?.author?.username}`);
 	}
+	import { goto } from '$app/navigation';
+
+	function handleNavigate() {
+		if (!isDetailedView) {
+			goto(`/posts/${post.id}`);
+		}
+	}
 </script>
 
 <div class="mx-auto w-full max-w-2xl space-y-3 rounded-lg bg-white p-4 shadow-md">
@@ -162,62 +171,93 @@
 	</div>
 
 	<!-- Post Content -->
-	<p class="leading-relaxed text-gray-800">{post.content}</p>
+	<div class="leading-relaxed text-gray-800">
+		{#if !isDetailedView && post.content.length > 200}
+			<p>
+				{post.content.slice(0, 200)}...
+				<button class="font-semibold text-blue-600 hover:underline" onclick={handleNavigate}>
+					See more
+				</button>
+			</p>
+		{:else}
+			<p>{post.content}</p>
+		{/if}
+	</div>
 
 	<!-- Media Grid -->
 	{#if post.media && post.media.length > 0}
-		{@const mediaCount = post.media.length}
-		{@const displayMedia = post.media.slice(0, 4)}
-		<!-- Show max 4 items -->
-		{@const remainingCount = mediaCount > 4 ? mediaCount - 3 : 0}
-		<!-- If >4, we show 3 and the 4th has the overlay -->
+		{#if isDetailedView}
+			<!-- Detailed View: Show ALL media in a vertical list or large grid -->
+			<div class="mt-3 space-y-4">
+				{#each post.media as item}
+					<div class="w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-900">
+						{#if item.type === 'image' || item.type?.startsWith('image')}
+							<img src={item.url} alt="Post media" class="w-full object-contain" />
+						{:else if item.type === 'video' || item.type?.startsWith('video')}
+							<video src={item.url} controls class="w-full"></video>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		{:else}
+			<!-- Feed View: Grid with Overflow -->
+			{@const mediaCount = post.media.length}
+			{@const displayMedia = post.media.slice(0, 4)}
+			<!-- Show max 4 items -->
+			{@const remainingCount = mediaCount > 4 ? mediaCount - 3 : 0}
+			<!-- If >4, we show 3 and the 4th has the overlay -->
 
-		<div
-			class={`mt-3 grid gap-1 overflow-hidden rounded-xl ${
-				mediaCount === 1
-					? 'h-[300px] grid-cols-1'
-					: mediaCount === 2
-						? 'h-[250px] grid-cols-2'
-						: mediaCount === 3
-							? 'h-[400px] grid-rows-2'
-							: 'h-[400px] grid-cols-2 grid-rows-2' // 4 or more
-			}`}
-		>
-			{#each displayMedia as item, i}
-				{@const isLastItem = i === 3}
-				{@const isOverlayNeeded = mediaCount > 4 && isLastItem}
+			<div
+				class={`mt-3 grid gap-1 overflow-hidden rounded-xl ${
+					mediaCount === 1
+						? 'h-[300px] grid-cols-1'
+						: mediaCount === 2
+							? 'h-[250px] grid-cols-2'
+							: mediaCount === 3
+								? 'h-[400px] grid-rows-2'
+								: 'h-[400px] grid-cols-2 grid-rows-2' // 4 or more
+				}`}
+			>
+				{#each displayMedia as item, i}
+					{@const isLastItem = i === 3}
+					{@const isOverlayNeeded = mediaCount > 4 && isLastItem}
 
-				<!-- Grid Spanning Logic -->
-				<!-- 3 items: First item takes full width of first row (col-span-2) -->
-				<div
-					class={`relative overflow-hidden bg-gray-100 dark:bg-gray-900 ${
-						mediaCount === 3 && i === 0 ? 'col-span-2 row-span-1' : ''
-					} ${
-						/* Image/Video sizing */
-						'h-full w-full'
-					}`}
-				>
-					{#if item.type === 'image' || item.type?.startsWith('image')}
-						<img
-							src={item.url}
-							alt="Post media"
-							class="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-						/>
-					{:else if item.type === 'video' || item.type?.startsWith('video')}
-						<video src={item.url} controls class="h-full w-full object-cover"></video>
-					{/if}
+					<!-- Grid Spanning Logic -->
+					<!-- 3 items: First item takes full width of first row (col-span-2) -->
+					<div
+						class={`relative cursor-pointer overflow-hidden bg-gray-100 dark:bg-gray-900 ${
+							mediaCount === 3 && i === 0 ? 'col-span-2 row-span-1' : ''
+						} ${
+							/* Image/Video sizing */
+							'h-full w-full'
+						}`}
+						onclick={handleNavigate}
+						role="button"
+						tabindex="0"
+						onkeydown={(e) => e.key === 'Enter' && handleNavigate()}
+					>
+						{#if item.type === 'image' || item.type?.startsWith('image')}
+							<img
+								src={item.url}
+								alt="Post media"
+								class="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+							/>
+						{:else if item.type === 'video' || item.type?.startsWith('video')}
+							<video src={item.url} controls class="h-full w-full object-cover"></video>
+						{/if}
 
-					<!-- Overflow Overlay -->
-					{#if isOverlayNeeded}
-						<div
-							class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/60 transition-colors hover:bg-black/70"
-						>
-							<span class="text-3xl font-bold text-white">+{mediaCount - 3}</span>
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
+						<!-- Overflow Overlay -->
+						{#if isOverlayNeeded}
+							<div
+								class="absolute inset-0 flex items-center justify-center bg-black/60 transition-colors hover:bg-black/70"
+							>
+								<span class="text-3xl font-bold text-white">+{mediaCount - 3}</span>
+							</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 
 	<!-- Post Actions (Likes, Comments Count) -->
