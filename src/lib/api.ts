@@ -251,6 +251,30 @@ export async function getFriendships(status?: FriendshipStatus, page: number = 1
 	return apiRequest('GET', path, undefined, true);
 }
 
+export async function getFriends(): Promise<import('$lib/types').User[]> {
+	const result = await getFriendships('accepted', 1, 100);
+	const currentUserId = auth.state.user?.id;
+
+	if (!currentUserId) return [];
+
+	return result.data.map((f) => {
+		if (f.requester_id === currentUserId) {
+			return f.receiver_info as unknown as import('$lib/types').User;
+		} else {
+			return f.requester_info as unknown as import('$lib/types').User;
+		}
+	});
+}
+
+
+
+export async function searchFriends(query: string, limit: number = 20): Promise<import('$lib/types').User[]> {
+	const params = new URLSearchParams();
+	params.set('query', query);
+	params.set('limit', String(limit));
+	return apiRequest('GET', `/friendships/search?${params.toString()}`, undefined, true);
+}
+
 export async function sendFriendRequest(receiverId: string): Promise<Friendship> {
 	return apiRequest('POST', '/friendships/requests', { receiver_id: receiverId }, true);
 }

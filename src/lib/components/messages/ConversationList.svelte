@@ -10,6 +10,8 @@ Fetches friends and groups to populate the list.
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import { presenceStore, type PresenceState } from '$lib/stores/presence';
 	import { formatDistanceToNow } from 'date-fns';
+	import CreateGroupModal from './CreateGroupModal.svelte';
+	import { Plus } from '@lucide/svelte';
 
 	let conversations = $state<ConversationSummary[]>([]);
 	let isLoading = $state(true);
@@ -59,20 +61,7 @@ Fetches friends and groups to populate the list.
 			class="rounded-full bg-blue-500 p-2 text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
 			on:click={() => (showCreateGroupModal = true)}
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke-width="1.5"
-				stroke="currentColor"
-				class="h-6 w-6"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M18 18.75V10.5m0 0l3 3m-3-3l-3 3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM12 18.75v-7.5m0 0l-3 3m3-3l3 3M9 18.75V10.5m0 0l3 3m-3-3l-3 3"
-				/>
-			</svg>
+			<Plus class="h-6 w-6" />
 		</button>
 	</div>
 
@@ -149,4 +138,12 @@ Fetches friends and groups to populate the list.
 			</ul>
 		{/if}
 	</div>
+
+	<CreateGroupModal
+		bind:showModal={showCreateGroupModal}
+		onGroupCreated={() => {
+			// Reload conversations
+			window.location.reload(); // Simple reload for now or re-fetch
+		}}
+	/>
 </div>

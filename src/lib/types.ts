@@ -61,3 +61,11 @@ export interface MessageEditedEvent {
 }
 
 export interface MessageCreatedEvent extends Message { }
+
+export interface User {
+	id: string;
+	username: string;
+	email: string;
+	avatar?: string;
+	full_name?: string;
+}
