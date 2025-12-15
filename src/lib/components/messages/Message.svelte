@@ -6,6 +6,7 @@ It styles messages differently based on whether they were sent by the current us
 	import { onMount } from 'svelte';
 	import { createEventDispatcher } from 'svelte';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { lightbox } from '$lib/stores/lightbox.svelte';
 	import type { Message } from '$lib/types';
 
 	export let message: Message;
@@ -79,9 +80,15 @@ It styles messages differently based on whether they were sent by the current us
 		// Show fallback
 		target.nextElementSibling?.classList.remove('hidden');
 	}
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 </script>
 
-<div class="my-2 flex items-start gap-2.5" class:flex-row-reverse={isMe}>
+<div
+	class="my-2 flex items-start gap-2.5"
+	class:flex-row-reverse={isMe}
+	in:fly={{ y: 20, duration: 400, easing: quintOut }}
+>
 	<img
 		class="h-8 w-8 rounded-full"
 		src={message.sender?.avatar || `https://i.pravatar.cc/150?u=${message.sender_id}`}
@@ -183,18 +190,51 @@ It styles messages differently based on whether they were sent by the current us
 				>
 					{#each gridMedia.slice(0, 4) as item, i}
 						<div
-							class="relative aspect-square w-full
+							class="relative aspect-square w-full cursor-pointer
 							{gridMedia.length === 3 && i === 0 ? 'col-span-2 aspect-[2/1]' : ''}
 							"
+							on:click={() => lightbox.open(gridMedia as any, i)}
+							role="button"
+							tabindex="0"
+							on:keypress={(e) => e.key === 'Enter' && lightbox.open(gridMedia as any, i)}
 						>
 							{#if item.type === 'video'}
 								<!-- svelte-ignore a11y-media-has-caption -->
-								<video src={item.url} controls class="h-full w-full bg-black object-cover"></video>
+								<video
+									src={item.url}
+									class="pointer-events-none h-full w-full bg-black object-cover"
+								></video>
+								<div
+									class="absolute inset-0 flex items-center justify-center bg-black/10 transition-colors hover:bg-black/20"
+								>
+									<div class="rounded-full bg-black/50 p-3 text-white backdrop-blur-sm">
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											class="h-8 w-8"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke="currentColor"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
+									</div>
+								</div>
 							{:else}
 								<img
 									src={item.url}
 									alt="Attachment"
-									class="h-full w-full cursor-pointer bg-gray-100 object-cover transition-opacity hover:opacity-90"
+									class="h-full w-full bg-gray-100 object-cover transition-opacity hover:opacity-90"
 									on:error={handleImgError}
 								/>
 							{/if}
@@ -202,7 +242,7 @@ It styles messages differently based on whether they were sent by the current us
 							<!-- Overlay for +X items -->
 							{#if gridMedia.length > 4 && i === 3}
 								<div
-									class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/50 text-xl font-bold text-white transition-colors hover:bg-black/60"
+									class="absolute inset-0 flex items-center justify-center bg-black/50 text-xl font-bold text-white transition-colors hover:bg-black/60"
 								>
 									+{gridMedia.length - 3}
 								</div>

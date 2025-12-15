@@ -14,7 +14,8 @@ It orchestrates the display of messages and the message input field.
 	} from '$lib/api';
 	import type { Message as MessageModel } from '$lib/types';
 	import { formatDistanceToNow } from 'date-fns';
-	import Message from './Message.svelte';
+	import Message from '$lib/components/messages/Message.svelte';
+	import Lightbox from '$lib/components/messages/Lightbox.svelte';
 	import MessageInput from './MessageInput.svelte';
 	import { websocketMessages } from '$lib/websocket';
 	import { auth } from '$lib/stores/auth.svelte';
@@ -393,5 +394,10 @@ It orchestrates the display of messages and the message input field.
 	</div>
 
 	<!-- Message Input -->
-	<MessageInput onSendMessage={handleSendMessage} {conversationId} />
+	<MessageInput
+		onSendMessage={async (content, files) => await handleSendMessage(content, files)}
+		{conversationId}
+	/>
+
+	<Lightbox />
 </div>

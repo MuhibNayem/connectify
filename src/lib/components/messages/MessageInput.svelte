@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import { sendWebSocketMessage } from '$lib/websocket';
 	import { getGroupDetails } from '$lib/api';
+	import { scale, fade } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 
 	export let onSendMessage: (content: string, files: File[]) => Promise<void>;
 	export let conversationId: string;
@@ -176,6 +178,7 @@
 			{#each files as file}
 				<div
 					class="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-100"
+					transition:scale={{ duration: 200, easing: quintOut }}
 				>
 					{#if file.type.startsWith('image/')}
 						<img
