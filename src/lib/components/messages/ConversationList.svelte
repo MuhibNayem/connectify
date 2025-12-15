@@ -9,6 +9,7 @@ Fetches friends and groups to populate the list.
 	import { auth } from '$lib/stores/auth.svelte';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import { presenceStore, type PresenceState } from '$lib/stores/presence';
+	import { formatDistanceToNow } from 'date-fns';
 
 	let conversations = $state<ConversationSummary[]>([]);
 	let isLoading = $state(true);
@@ -55,7 +56,7 @@ Fetches friends and groups to populate the list.
 	<div class="flex items-center justify-between border-b border-gray-200 p-4">
 		<h1 class="text-xl font-bold text-gray-800">Chats</h1>
 		<button
-			class="focus:ring-opacity-50 rounded-full bg-blue-500 p-2 text-white shadow-lg hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+			class="rounded-full bg-blue-500 p-2 text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
 			on:click={() => (showCreateGroupModal = true)}
 		>
 			<svg
@@ -78,11 +79,11 @@ Fetches friends and groups to populate the list.
 	<!-- Conversation List -->
 	<div class="flex-1 overflow-y-auto">
 		{#if isLoading}
-			<div class="p-4 space-y-3">
+			<div class="space-y-3 p-4">
 				{#each Array(5) as _, i (i)}
 					<div class="flex items-center space-x-3">
 						<Skeleton class="h-12 w-12 rounded-full" />
-						<div class="space-y-2 flex-1">
+						<div class="flex-1 space-y-2">
 							<Skeleton class="h-4 w-3/4" />
 							<Skeleton class="h-4 w-1/2" />
 						</div>
@@ -114,12 +115,33 @@ Fetches friends and groups to populate the list.
 								/>
 								{#if isOnline}
 									<span
-										class="absolute bottom-0 right-4 h-3 w-3 rounded-full bg-green-500 border-2 border-white"
+										class="absolute bottom-0 right-4 h-3 w-3 rounded-full border-2 border-white bg-green-500"
 									></span>
 								{/if}
 							</div>
 							<div class="min-w-0 flex-1">
 								<p class="truncate font-semibold text-gray-800">{conv.name}</p>
+								{#if conv.last_message_content}
+									<div class="flex items-center text-sm text-gray-500">
+										<p class="max-w-[140px] truncate">{conv.last_message_content}</p>
+										{#if conv.last_message_timestamp}
+											<span class="mx-1">•</span>
+											<span>
+												{formatDistanceToNow(new Date(conv.last_message_timestamp), {
+													addSuffix: false
+												})
+													.replace('about ', '')
+													.replace('less than a minute', 'just now')
+													.replace(' minute', 'm')
+													.replace(' minutes', 'm')
+													.replace(' hour', 'h')
+													.replace(' hours', 'h')
+													.replace(' day', 'd')
+													.replace(' days', 'd')}
+											</span>
+										{/if}
+									</div>
+								{/if}
 							</div>
 						</a>
 					</li>

@@ -12,6 +12,7 @@ It orchestrates the display of messages and the message input field.
 		type ConversationSummary,
 		markConversationAsSeen
 	} from '$lib/api';
+	import { formatDistanceToNow } from 'date-fns';
 	import Message from './Message.svelte';
 	import MessageInput from './MessageInput.svelte';
 	import { websocketMessages } from '$lib/websocket';
@@ -251,7 +252,7 @@ It orchestrates the display of messages and the message input field.
 				const { conversation_id, user_id, timestamp, is_group } = event.data;
 				const [type, id] = conversationId.split('-');
 				if (id === conversation_id) {
-					messages.forEach(msg => {
+					messages.forEach((msg) => {
 						if (new Date(msg.created_at) <= new Date(timestamp)) {
 							if (!msg.seen_by.includes(user_id)) {
 								msg.seen_by.push(user_id);
@@ -303,7 +304,7 @@ It orchestrates the display of messages and the message input field.
 
 <div class="flex h-full flex-col">
 	<!-- Chat Header -->
-	<header class="border-b border-gray-200 bg-white p-4 flex items-center space-x-4">
+	<header class="flex items-center space-x-4 border-b border-gray-200 bg-white p-4">
 		{#if conversationPartner}
 			<div class="relative">
 				<Avatar class="h-10 w-10">
@@ -312,7 +313,7 @@ It orchestrates the display of messages and the message input field.
 				</Avatar>
 				{#if !conversationPartner.is_group && presenceState[conversationPartner.id]?.status === 'online'}
 					<span
-						class="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"
+						class="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500"
 					></span>
 				{/if}
 			</div>
@@ -320,7 +321,18 @@ It orchestrates the display of messages and the message input field.
 				<h2 class="text-lg font-bold">{conversationPartner.name}</h2>
 				{#if !conversationPartner.is_group}
 					<p class="text-sm text-gray-500">
-						{presenceState[conversationPartner.id]?.status === 'online' ? 'Online' : 'Offline'}
+						{#if presenceState[conversationPartner.id]?.status === 'online'}
+							Online
+						{:else if presenceState[conversationPartner.id]?.last_seen}
+							Active {formatDistanceToNow(
+								new Date(presenceState[conversationPartner.id].last_seen * 1000),
+								{
+									addSuffix: true
+								}
+							)}
+						{:else}
+							Offline
+						{/if}
 					</p>
 				{/if}
 			</div>
@@ -356,5 +368,5 @@ It orchestrates the display of messages and the message input field.
 	</div>
 
 	<!-- Message Input -->
-	<MessageInput onSendMessage={handleSendMessage} conversationId={conversationId} />
+	<MessageInput onSendMessage={handleSendMessage} {conversationId} />
 </div>

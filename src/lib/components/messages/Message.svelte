@@ -100,7 +100,7 @@ It styles messages differently based on whether they were sent by the current us
 			{/if}
 		</div>
 		<div
-			class="flex flex-col border-gray-200 p-4 leading-1.5"
+			class="leading-1.5 flex flex-col border-gray-200 p-4"
 			class:bg-blue-500={isMe}
 			class:text-white={isMe}
 			class:rounded-e-xl={!isMe}
