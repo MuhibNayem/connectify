@@ -7,6 +7,7 @@
 	import { formatDistanceToNow } from 'date-fns';
 	import { websocketMessages } from '$lib/websocket';
 	import CommentSection from './CommentSection.svelte';
+	import { goto } from '$app/navigation';
 
 	export let post: {
 		id: string;
@@ -22,7 +23,9 @@
 		location?: string;
 		privacy: string;
 		comments: any[];
-		mentions: string[];
+		mentions: string[]; // List of IDs
+		// ADDED: Definition for the full objects used in HTML
+		mentioned_users?: { id: string; username: string }[];
 		specific_reaction_counts: { [key: string]: number };
 		hashtags: string[];
 		created_at: string;
@@ -52,7 +55,7 @@
 					if (userReaction) {
 						userReactionId = userReaction.id;
 					} else {
-						userReactionId = null; // Ensure it's null if no reaction found
+						userReactionId = null;
 					}
 				} catch (e) {
 					console.error('Failed to fetch reactions for post:', e);
@@ -63,41 +66,31 @@
 		const unsubscribe = websocketMessages.subscribe((event) => {
 			if (!event?.data) return;
 
-			// Handle ReactionCreated event
+			// Handle ReactionCreated
 			if (event.type === 'ReactionCreated' && event.data.target_id === post.id) {
-				// post.specific_reaction_counts[event.data.type] =
-				// 	(post.specific_reaction_counts[event.data.type] || 0) + 1;
 				if (event.data.user_id != currentUserId) post.total_reactions += 1;
 
-				// Handle special case for "LIKE" reactions by the current user
 				if (event.data.user_id === currentUserId && event.data.type === 'LIKE') {
 					userReactionId = event.data.id;
 				}
 			}
 
-			// Handle ReactionDeleted event
+			// Handle ReactionDeleted
 			if (event.type === 'ReactionDeleted' && event.data.target_id === post.id) {
-				// Decrement the reaction count when a reaction is deleted
-
-				// post.specific_reaction_counts[event.data.type] = Math.max(
-				// 	0,
-				// 	(post.specific_reaction_counts[event.data.type] || 0) - 1
-				// );
 				if (event.data.user_id != currentUserId)
 					post.total_reactions = Math.max(0, post.total_reactions - 1);
 
-				// If the deleted reaction was by the current user and was a "LIKE", reset the reaction ID
 				if (event.data.user_id === currentUserId && event.data.type === 'LIKE') {
 					userReactionId = null;
 				}
 			}
 
-			// Handle CommentCreated event
+			// Handle CommentCreated
 			if (event.type === 'CommentCreated' && event.data.post_id === post.id) {
 				post.total_comments += 1;
 			}
 
-			// Handle CommentDeleted event
+			// Handle CommentDeleted
 			if (event.type === 'CommentDeleted' && event.data.post_id === post.id) {
 				post.total_comments = Math.max(0, post.total_comments - 1);
 			}
@@ -120,7 +113,7 @@
 					'DELETE',
 					`/feed/reactions/${userReactionId}?targetId=${post.id}&targetType=post`
 				);
-				userReactionId = null; // Optimistic update for immediate UI feedback
+				userReactionId = null;
 				post.total_reactions -= 1;
 			} else {
 				const newReaction = await apiRequest('POST', '/feed/reactions', {
@@ -128,7 +121,7 @@
 					target_type: 'post',
 					type: 'LIKE'
 				});
-				userReactionId = newReaction.id; // Optimistic update for immediate UI feedback
+				userReactionId = newReaction.id;
 				post.total_reactions += 1;
 			}
 		} catch (e: any) {
@@ -136,6 +129,7 @@
 			console.error('Toggle like error:', e);
 		}
 	}
+
 	function handleComment() {
 		showComments = !showComments;
 	}
@@ -143,17 +137,31 @@
 	function handleShare() {
 		alert(`Sharing post by ${post?.author?.username}`);
 	}
-	import { goto } from '$app/navigation';
 
 	function handleNavigate() {
 		if (!isDetailedView) {
 			goto(`/posts/${post.id}`);
 		}
 	}
+
+	function parseContent(content: string) {
+		if (!content) return '';
+
+		// FIXED: Simplified logic.
+		// We look for @word patterns and check if they exist in the mentioned_users array.
+		return content.replace(/@(\w+)/g, (match, username) => {
+			const mentionedUsers = post.mentioned_users || [];
+			const user = mentionedUsers.find((u) => u.username === username);
+
+			if (user) {
+				return `<a href="/profile/${user.id}" class="text-blue-600 font-semibold">${username}</a>`;
+			}
+			return match;
+		});
+	}
 </script>
 
 <div class="mx-auto w-full max-w-2xl space-y-3 rounded-lg bg-white p-4 shadow-md">
-	<!-- Post Header -->
 	<div class="flex items-center space-x-3">
 		<Avatar class="h-10 w-10">
 			<AvatarImage
@@ -166,9 +174,13 @@
 			<div class="flex items-center space-x-1">
 				<p class="font-semibold text-gray-900 dark:text-white">
 					{post.author.username}
-					<!-- Use username for now as Full Name might not be populated or same -->
 				</p>
-				{#if post.mentions && post.mentions.length > 0}
+				{#if post.mentioned_users && post.mentioned_users.length > 0}
+					<span class="font-normal text-gray-500 dark:text-gray-400">with</span>
+					<span class="font-medium text-gray-900 dark:text-white">
+						{post.mentioned_users.length} people
+					</span>
+				{:else if post.mentions && post.mentions.length > 0}
 					<span class="font-normal text-gray-500 dark:text-gray-400">with</span>
 					<span class="font-medium text-gray-900 dark:text-white">
 						{post.mentions.length} people
@@ -186,24 +198,21 @@
 		</div>
 	</div>
 
-	<!-- Post Content -->
 	<div class="leading-relaxed text-gray-800">
 		{#if !isDetailedView && post.content.length > 200}
 			<p>
-				{post.content.slice(0, 200)}...
+				{@html parseContent(post.content.slice(0, 200))}...
 				<button class="font-semibold text-blue-600 hover:underline" onclick={handleNavigate}>
 					See more
 				</button>
 			</p>
 		{:else}
-			<p>{post.content}</p>
+			<p>{@html parseContent(post.content)}</p>
 		{/if}
 	</div>
 
-	<!-- Media Grid -->
 	{#if post.media && post.media.length > 0}
 		{#if isDetailedView}
-			<!-- Detailed View: Show ALL media in a vertical list or large grid -->
 			<div class="mt-3 space-y-4">
 				{#each post.media as item}
 					<div class="w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-900">
@@ -216,13 +225,9 @@
 				{/each}
 			</div>
 		{:else}
-			<!-- Feed View: Grid with Overflow -->
 			{@const mediaCount = post.media.length}
 			{@const displayMedia = post.media.slice(0, 4)}
-			<!-- Show max 4 items -->
 			{@const remainingCount = mediaCount > 4 ? mediaCount - 3 : 0}
-			<!-- If >4, we show 3 and the 4th has the overlay -->
-
 			<div
 				class={`mt-3 grid gap-1 overflow-hidden rounded-xl ${
 					mediaCount === 1
@@ -238,8 +243,6 @@
 					{@const isLastItem = i === 3}
 					{@const isOverlayNeeded = mediaCount > 4 && isLastItem}
 
-					<!-- Grid Spanning Logic -->
-					<!-- 3 items: First item takes full width of first row (col-span-2) -->
 					<div
 						class={`relative cursor-pointer overflow-hidden bg-gray-100 dark:bg-gray-900 ${
 							mediaCount === 3 && i === 0 ? 'col-span-2 row-span-1' : ''
@@ -262,7 +265,6 @@
 							<video src={item.url} controls class="h-full w-full object-cover"></video>
 						{/if}
 
-						<!-- Overflow Overlay -->
 						{#if isOverlayNeeded}
 							<div
 								class="absolute inset-0 flex items-center justify-center bg-black/60 transition-colors hover:bg-black/70"
@@ -276,7 +278,6 @@
 		{/if}
 	{/if}
 
-	<!-- Post Actions (Likes, Comments Count) -->
 	<div
 		class="flex items-center justify-between border-b border-gray-200 pb-2 text-sm text-gray-600"
 	>
@@ -284,7 +285,6 @@
 		<span>{post.total_comments || 0} Comments</span>
 	</div>
 
-	<!-- Action Buttons (Like, Comment, Share) -->
 	<div class="flex justify-around pt-2">
 		<Button
 			variant="ghost"

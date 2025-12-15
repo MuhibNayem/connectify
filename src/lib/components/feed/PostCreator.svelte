@@ -129,6 +129,47 @@
 		taggedUsers = taggedUsers.filter((u) => u.id !== userId);
 	}
 
+	// Inline Mention Logic
+	let showInlineMentions = false;
+	let mentionQuery = '';
+	let mentionStartPos = -1;
+
+	function handleTextareaInput(event: Event) {
+		const textarea = event.target as HTMLTextAreaElement;
+		const cursorPos = textarea.selectionStart;
+		const textUpToCursor = textarea.value.substring(0, cursorPos);
+
+		const lastAtPos = textUpToCursor.lastIndexOf('@');
+
+		if (lastAtPos === -1) {
+			showInlineMentions = false;
+			return;
+		}
+
+		const textAfterAt = textUpToCursor.substring(lastAtPos + 1);
+		if (/\s/.test(textAfterAt)) {
+			showInlineMentions = false;
+			return;
+		}
+
+		mentionStartPos = lastAtPos;
+		mentionQuery = textAfterAt;
+		showInlineMentions = true;
+	}
+
+	function handleInlineMentionSelection(user: User) {
+		const before = postContent.substring(0, mentionStartPos);
+		const after = postContent.substring(mentionStartPos + 1 + mentionQuery.length);
+
+		postContent = `${before}@${user.username} ${after}`;
+
+		if (!taggedUsers.find((u) => u.id === user.id)) {
+			taggedUsers = [...taggedUsers, user];
+		}
+
+		showInlineMentions = false;
+	}
+
 	async function handleSubmit() {
 		if (!postContent.trim() && mediaItems.length === 0) {
 			alert('Post content or media cannot be empty.');
@@ -189,10 +230,20 @@
 					<Textarea
 						placeholder="What's on your mind?"
 						bind:value={postContent}
+						oninput={handleTextareaInput}
+						onblur={() => setTimeout(() => (showInlineMentions = false), 150)}
 						rows={mediaItems.length > 0 ? 2 : 3}
 						class="w-full resize-none border-none bg-transparent p-0 text-lg placeholder:text-gray-500 focus-visible:ring-0"
 						disabled={submitting}
 					/>
+					{#if showInlineMentions}
+						<div class="absolute left-0 top-full z-50 mt-1 w-full" style="max-width: 300px;">
+							<UserMentionDropdown
+								query={mentionQuery}
+								onSelection={handleInlineMentionSelection}
+							/>
+						</div>
+					{/if}
 					{#if showEmojiPicker}
 						<div
 							class="absolute right-0 top-full z-50 mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
