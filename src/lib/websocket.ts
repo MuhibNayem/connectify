@@ -13,7 +13,7 @@ export const websocketMessages = writable<WebSocketEvent | null>(null);
 let ws: WebSocket | null = null;
 let reconnectInterval: number | null = null;
 
-const WS_URL = 'ws://localhost:8081/ws';
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8081/ws';
 
 export function connectWebSocket() {
 	if (!browser) return;

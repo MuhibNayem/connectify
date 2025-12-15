@@ -2,7 +2,7 @@ import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { auth } from './stores/auth.svelte';
 
-const API_BASE_URL = 'http://localhost:8080/api'; // Backend API URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'; // Backend API URL
 
 // --- Backend Model Interfaces ---
 

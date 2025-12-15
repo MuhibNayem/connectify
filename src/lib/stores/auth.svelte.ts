@@ -16,7 +16,7 @@ interface AuthState {
     refreshToken: string | null;
 }
 
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
 // Create the state with Svelte 5 Runes
 const authState = $state<AuthState>({

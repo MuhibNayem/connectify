@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { apiRequest } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
+	import { websocketMessages } from '$lib/websocket';
 	import Comment from './Comment.svelte';
 	import UserMentionDropdown from './UserMentionDropdown.svelte';
 
@@ -39,14 +40,13 @@
 			if (!newComment?.replies) {
 				newComment.replies = [];
 			}
-			
+
 			const newCommentWithAuthor = { ...newComment, author: auth.state.user };
 			console.log('New comment created 2:', newComment);
 			comments = [newCommentWithAuthor, ...comments];
 			console.log('Comment posted successfully:', newCommentWithAuthor);
 			newCommentContent = '';
 			mentionedUsers = [];
-			
 		} catch (error) {
 			console.log('Failed to post comment:', error);
 		}
@@ -90,6 +90,21 @@
 
 	onMount(() => {
 		fetchComments();
+
+		const unsubscribe = websocketMessages.subscribe((event) => {
+			if (event && event.type === 'CommentCreated' && event.data.post_id === postId) {
+				// Avoid duplicate comments if we just posted it ourselves
+				// (Although handlePostComment adds it to the list, the WS event might come too)
+				// A simple check is if it's already in the list
+				if (!comments.some((c) => c.id === event.data.id)) {
+					comments = [event.data, ...comments];
+				}
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
 	});
 </script>
 
@@ -117,7 +132,7 @@
 					}}
 				></textarea>
 				{#if showMentions}
-					<div class="absolute bottom-full z-10 mt-1 mb-1 w-full">
+					<div class="absolute bottom-full z-10 mb-1 mt-1 w-full">
 						<UserMentionDropdown query={mentionQuery} onSelection={handleMentionSelection} />
 					</div>
 				{/if}
