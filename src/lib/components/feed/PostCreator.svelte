@@ -108,7 +108,6 @@
 
 	function toggleLocation() {
 		showLocationInput = !showLocationInput;
-		if (!showLocationInput) location = '';
 	}
 
 	function toggleUserTagger() {
