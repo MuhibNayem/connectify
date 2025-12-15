@@ -104,7 +104,14 @@ It orchestrates the display of messages and the message input field.
 
 			const response = await getMessages(params);
 			if (response && Array.isArray(response.messages)) {
-				messages = response.messages.reverse();
+				// Ensure seen_by and delivered_to are always arrays
+				messages = response.messages
+					.map((msg: any) => ({
+						...msg,
+						seen_by: msg.seen_by || [],
+						delivered_to: msg.delivered_to || []
+					}))
+					.reverse();
 			} else {
 				messages = [];
 			}
@@ -278,14 +285,22 @@ It orchestrates the display of messages and the message input field.
 			case 'CONVERSATION_SEEN_UPDATE': {
 				const { conversation_id, user_id, timestamp, is_group } = event.data;
 				const [type, id] = conversationId.split('-');
-				if (id === conversation_id) {
+				// For DMs: conversation_id is the OTHER person's ID
+				// If I'm viewing chat with X (conversationId = "user-X"), and X marks messages as seen,
+				// the event has conversation_id = my_id, user_id = X
+				// So we need to match if: id === conversation_id (I marked as seen on X's chat)
+				// OR: id === user_id (X marked as seen on my chat)
+				const isRelevant = id === conversation_id || (!is_group && id === user_id);
+				if (isRelevant) {
 					messages.forEach((msg) => {
 						if (new Date(msg.created_at) <= new Date(timestamp)) {
+							if (!msg.seen_by) msg.seen_by = [];
 							if (!msg.seen_by.includes(user_id)) {
 								msg.seen_by.push(user_id);
 							}
 						}
 					});
+					messages = [...messages]; // Trigger Svelte reactivity
 				}
 				break;
 			}
@@ -299,6 +314,7 @@ It orchestrates the display of messages and the message input field.
 						}
 					}
 				});
+				messages = [...messages]; // Trigger Svelte reactivity
 				break;
 			}
 			case 'TYPING': {
@@ -335,10 +351,14 @@ It orchestrates the display of messages and the message input field.
 
 	let seenDebounceTimer: any;
 	function handleMessageVisible(message: any) {
+		// Only mark messages as seen if they are NOT from the current user
+		if (message.sender_id === auth.state.user?.id) return;
+
 		clearTimeout(seenDebounceTimer);
 		seenDebounceTimer = setTimeout(() => {
 			const [type, id] = conversationId.split('-');
-			markConversationAsSeen(conversationId, message.created_at, type === 'group');
+			// Use current time to mark ALL messages in the conversation as seen up to now
+			markConversationAsSeen(conversationId, new Date().toISOString(), type === 'group');
 		}, 500);
 	}
 </script>

@@ -94,19 +94,27 @@
 
 	async function handleSaveEdit() {
 		if (editedContent.trim() === '' || editedContent === message.content) {
-			// If content is empty or unchanged, just exit editing mode
 			isEditing = false;
 			return;
 		}
+
+		const originalContent = message.content;
+		const wasEdited = message.is_edited;
+
+		// Optimistic update
+		message.content = editedContent;
+		message.is_edited = true;
+		isEditing = false;
+
 		try {
-			const updatedMessage = await apiRequest('PUT', `/messages/${message.id}`, { content: editedContent });
-			// Update the message object reactively
-			message.content = updatedMessage.content;
-			message.is_edited = updatedMessage.is_edited;
-			message.updated_at = updatedMessage.updated_at;
-			message.edited_at = updatedMessage.edited_at;
-			isEditing = false;
+			await apiRequest('PUT', `/messages/${message.id}`, { content: editedContent });
+			// No need to wait for response to update UI, we already did.
+			// Only update metadata if needed from response, but content is key.
 		} catch (e: any) {
+			// Revert on failure
+			message.content = originalContent;
+			message.is_edited = wasEdited;
+			isEditing = true;
 			alert(`Failed to edit message: ${e.message}`);
 			console.error('Edit message error:', e);
 		}
@@ -114,17 +122,23 @@
 
 	function handleCancelEdit() {
 		isEditing = false;
-		editedContent = message.content; // Revert to original content
+		editedContent = message.content;
 	}
 
 	async function handleDelete() {
 		if (!confirm('Are you sure you want to delete this message?')) {
 			return;
 		}
+
+		// Optimistic update
+		const wasDeleted = message.is_deleted;
+		message.is_deleted = true;
+		
 		try {
 			await apiRequest('DELETE', `/messages/${message.id}`);
-			// Message will be updated via WebSocket event, so no need to modify here
 		} catch (e: any) {
+			// Revert
+			message.is_deleted = wasDeleted;
 			alert(`Failed to delete message: ${e.message}`);
 			console.error('Delete message error:', e);
 		}
