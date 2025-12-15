@@ -59,6 +59,8 @@ export interface ConversationSummary {
 	is_group: boolean;
 	last_message_content?: string;
 	last_message_timestamp?: string;
+	last_message_sender_id?: string;
+	last_message_sender_name?: string;
 }
 
 export type FriendshipStatus = 'pending' | 'accepted' | 'rejected' | 'blocked';

@@ -3,7 +3,6 @@ This is the main chat window component.
 It orchestrates the display of messages and the message input field.
 -->
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import {
 		getMessages,
 		sendMessage,
@@ -68,9 +67,11 @@ It orchestrates the display of messages and the message input field.
 		}
 	}
 
-	onMount(async () => {
-		await loadMessages();
-		await loadConversationPartner();
+	$effect(() => {
+		if (conversationId) {
+			loadMessages();
+			loadConversationPartner();
+		}
 	});
 
 	async function loadConversationPartner() {
@@ -304,8 +305,22 @@ It orchestrates the display of messages and the message input field.
 				const { user_id, conversation_id, is_typing } = event.data;
 				// Only show typing indicator if the event is for the current conversation
 				// and the typing user is not the current authenticated user
-				const [, id] = conversation_id.split('-');
-				if (id === auth.state.user?.id && user_id !== auth.state.user?.id) {
+				const [connType, id] = conversation_id.split('-');
+
+				// Logic:
+				// 1. If it's a group chat, the conversation_id (e.g., group-123) must match current conversationId
+				// 2. If it's a DM (e.g., user-MY_ID), the user_id (SENDER) must be the person I'm chatting with (currentChatId)
+
+				let isRelevant = false;
+				if (type === 'group' && conversation_id === conversationId) {
+					isRelevant = true;
+				} else if (type === 'user' && user_id === currentChatId) {
+					// For DMs, the conversation_id sent is 'user-MY_ID' (targeted at me).
+					// We care if the SENDER (user_id) is the person we are currently looking at.
+					isRelevant = true;
+				}
+
+				if (isRelevant && user_id !== auth.state.user?.id) {
 					isOpponentTyping = is_typing;
 					if (is_typing) {
 						startTypingTimeout();

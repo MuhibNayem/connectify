@@ -112,7 +112,16 @@ Fetches friends and groups to populate the list.
 								<p class="truncate font-semibold text-gray-800">{conv.name}</p>
 								{#if conv.last_message_content}
 									<div class="flex items-center text-sm text-gray-500">
-										<p class="max-w-[140px] truncate">{conv.last_message_content}</p>
+										<p class="max-w-[140px] truncate">
+											{#if conv.last_message_sender_id === auth.state.user?.id}
+												<span class="font-medium text-gray-900">You: </span>
+											{:else if conv.is_group && conv.last_message_sender_name}
+												<span class="font-medium text-gray-900"
+													>{conv.last_message_sender_name}:
+												</span>
+											{/if}
+											{conv.last_message_content}
+										</p>
 										{#if conv.last_message_timestamp}
 											<span class="mx-1">•</span>
 											<span>
