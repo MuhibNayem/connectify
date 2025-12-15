@@ -91,14 +91,22 @@ It styles messages differently based on whether they were sent by the current us
 	class:flex-row-reverse={isMe}
 	in:fly={{ y: 20, duration: 400, easing: quintOut }}
 >
-	<img
-		class="h-8 w-8 rounded-full"
-		src={message.sender?.avatar || `https://i.pravatar.cc/150?u=${message.sender_id}`}
-		alt="{message.sender_name || 'User'}'s avatar"
-	/>
+	<a href="/profile/{message.sender_id}" class="transition-opacity hover:opacity-80">
+		<img
+			class="h-8 w-8 rounded-full"
+			src={(isMe ? auth.state.user?.avatar : message.sender?.avatar) ||
+				`https://i.pravatar.cc/150?u=${message.sender_id}`}
+			alt="{message.sender_name || 'User'}'s avatar"
+		/>
+	</a>
 	<div class="flex w-full max-w-[320px] flex-col gap-1">
 		<div class="flex items-center space-x-2" class:justify-end={isMe}>
-			<span class="text-sm font-semibold text-gray-900">{message?.sender_name || 'User'}</span>
+			<a
+				href="/profile/{message.sender_id}"
+				class="text-sm font-semibold text-gray-900 hover:underline"
+			>
+				{message?.sender_name || 'User'}
+			</a>
 			<span class="text-xs font-normal text-gray-500"
 				>{new Date(message.created_at).toLocaleTimeString()}</span
 			>
