@@ -95,3 +95,37 @@ export interface NotificationSettings {
 	notify_on_tag: boolean;
 	notify_on_message: boolean;
 }
+
+export interface PostAuthor {
+	id: string;
+	username: string;
+	avatar?: string;
+	full_name?: string;
+}
+
+export interface Post {
+	id: string;
+	user_id: string;
+	author: PostAuthor;
+	content: string;
+	media?: { url: string; type: string }[];
+	location?: string;
+	privacy: string;
+	comments: any[]; // You might want to define Comment type too
+	mentions: string[];
+	mentioned_users?: { id: string; username: string }[];
+	specific_reaction_counts: { [key: string]: number };
+	hashtags: string[];
+	created_at: string;
+	updated_at: string;
+	total_reactions: number;
+	total_comments: number;
+	community_id?: string;
+}
+
+export interface FeedResponse {
+	posts: Post[];
+	total: number;
+	page: number;
+	limit: number;
+}

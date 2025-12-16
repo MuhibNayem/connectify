@@ -116,7 +116,7 @@
 		loadingPosts = true;
 		postsError = null;
 		try {
-			const response = await apiRequest('GET', `/feed/posts?user_id=${id}`);
+			const response = await apiRequest('GET', `/posts?user_id=${id}`);
 			posts = response.posts || [];
 		} catch (err: any) {
 			postsError = err.message || 'Failed to fetch user posts.';

@@ -22,6 +22,8 @@
 		avatar?: string;
 	};
 
+	export let communityId: string | undefined = undefined;
+
 	let postContent: string = '';
 	let mediaItems: MediaItem[] = [];
 	let privacy: 'PUBLIC' | 'FRIENDS' | 'ONLY_ME' = 'PUBLIC';
@@ -183,6 +185,7 @@
 			formData.append('content', postContent.trim());
 			formData.append('privacy', privacy);
 			if (location) formData.append('location', location);
+			if (communityId) formData.append('community_id', communityId);
 
 			mediaItems.forEach((item) => {
 				formData.append('files[]', item.file);
@@ -192,7 +195,7 @@
 				formData.append('mentions[]', user.id);
 			});
 
-			const newPost = await apiRequest('POST', '/feed/posts', formData);
+			const newPost = await apiRequest('POST', '/posts', formData);
 
 			if (!newPost.comments) {
 				newPost.comments = [];

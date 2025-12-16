@@ -60,12 +60,11 @@
 			<span class="text-gray-700">Friends</span>
 		</a>
 		<a
-			href="/groups"
+			href="/communities"
 			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
 		>
-			<!-- <Group size={20} /> -->
-			<span class="text-xl">🏘️</span>
-			<span class="text-gray-700">Groups</span>
+			<span class="text-xl">🌍</span>
+			<span class="text-gray-700">Communities</span>
 		</a>
 		<a
 			href="/events"

@@ -474,3 +474,121 @@ export async function uploadFiles(files: File[]): Promise<{ url: string; type: s
 	return apiRequest('POST', '/upload', formData, true);
 }
 
+
+// Community Types & APIs
+
+export type CommunityPrivacy = 'public' | 'closed' | 'secret';
+
+export interface CommunitySettings {
+	require_post_approval: boolean;
+	require_join_approval: boolean;
+}
+
+export interface CommunityStats {
+	member_count: number;
+	post_count: number;
+}
+
+export interface Community {
+	id: string;
+	name: string;
+	description: string;
+	slug: string;
+	category: string;
+	avatar: string;
+	cover_image: string;
+	privacy: CommunityPrivacy;
+	settings: CommunitySettings;
+	stats: CommunityStats;
+	is_member?: boolean;
+	is_admin?: boolean;
+	is_pending?: boolean;
+	created_at: string;
+}
+
+export interface CreateCommunityRequest {
+	name: string;
+	description: string;
+	category: string;
+	privacy: CommunityPrivacy;
+	require_post_approval: boolean;
+	require_join_approval: boolean;
+}
+
+export interface UpdateCommunityRequest {
+	name?: string;
+	description?: string;
+	category?: string;
+	avatar?: string;
+	cover_image?: string;
+	privacy?: CommunityPrivacy;
+	require_post_approval?: boolean;
+	require_join_approval?: boolean;
+}
+
+export async function createCommunity(data: CreateCommunityRequest): Promise<Community> {
+	return apiRequest('POST', '/communities', data, true);
+}
+
+export async function getCommunities(page: number = 1, limit: number = 10, query?: string): Promise<{ communities: Community[]; total: number; page: number; limit: number }> {
+	let url = `/communities?page=${page}&limit=${limit}`;
+	if (query) {
+		url += `&q=${encodeURIComponent(query)}`;
+	}
+	return apiRequest('GET', url, undefined, true);
+}
+
+export async function getUserCommunities(userId: string = 'me'): Promise<Community[]> {
+	return apiRequest('GET', `/communities/user/${userId}`, undefined, true);
+}
+
+export async function getCommunity(id: string): Promise<Community> {
+	return apiRequest('GET', `/communities/${id}`, undefined, true);
+}
+
+export async function updateCommunitySettings(id: string, data: UpdateCommunityRequest): Promise<void> {
+	return apiRequest('PUT', `/communities/${id}/settings`, data, true);
+}
+
+export async function joinCommunity(id: string): Promise<void> {
+	return apiRequest('POST', `/communities/${id}/join`, undefined, true);
+}
+
+export async function leaveCommunity(id: string): Promise<void> {
+	return apiRequest('POST', `/communities/${id}/leave`, undefined, true);
+}
+
+export async function approveCommunityMember(communityId: string, userId: string): Promise<void> {
+	return apiRequest('POST', `/communities/${communityId}/approve`, { user_id: userId }, true);
+}
+
+export async function rejectCommunityMember(communityId: string, userId: string): Promise<void> {
+	return apiRequest('POST', `/communities/${communityId}/reject`, { user_id: userId }, true);
+}
+
+export async function getCommunityMembers(communityId: string, page = 1, limit = 10): Promise<{ users: import('./types').User[], total: number }> {
+	return apiRequest('GET', `/communities/${communityId}/members?page=${page}&limit=${limit}`, undefined, true);
+}
+
+export async function getCommunityAdmins(communityId: string): Promise<import('./types').User[]> {
+	return apiRequest('GET', `/communities/${communityId}/admins`, undefined, true);
+}
+
+export async function getCommunityPendingMembers(communityId: string, page = 1, limit = 10): Promise<{ users: import('./types').User[], total: number }> {
+	return apiRequest('GET', `/communities/${communityId}/pending-members?page=${page}&limit=${limit}`, undefined, true);
+}
+
+
+// Feed API
+export async function getPosts(params: { page?: number; limit?: number; community_id?: string; user_id?: string }): Promise<import('./types').FeedResponse> {
+	const query = new URLSearchParams();
+	if (params.page) query.set('page', String(params.page));
+	if (params.limit) query.set('limit', String(params.limit));
+	if (params.community_id) query.set('community_id', params.community_id);
+	if (params.user_id) query.set('user_id', params.user_id);
+	return apiRequest('GET', `/posts?${query.toString()}`, undefined, true);
+}
+
+export async function createPost(data: FormData | any): Promise<import('./types').Post> {
+	return apiRequest('POST', '/posts', data, true);
+}

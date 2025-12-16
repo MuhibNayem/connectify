@@ -18,7 +18,7 @@
 
 	async function fetchComments() {
 		try {
-			comments = await apiRequest('GET', `/feed/posts/${postId}/comments`);
+			comments = await apiRequest('GET', `/posts/${postId}/comments`);
 			if (!Array.isArray(comments)) {
 				comments = [];
 			}

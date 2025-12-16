@@ -48,7 +48,7 @@
 		(async () => {
 			if (currentUserId) {
 				try {
-					const reactions = await apiRequest('GET', `/feed/posts/${post.id}/reactions`);
+					const reactions = await apiRequest('GET', `/posts/${post.id}/reactions`);
 					const userReaction = reactions?.find(
 						(r: any) => r.user_id === currentUserId && r.type === 'LIKE'
 					);

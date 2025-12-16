@@ -20,7 +20,7 @@
 
 	onMount(async () => {
 		try {
-			post = await apiRequest('GET', `/feed/posts/${postId}`);
+			post = await apiRequest('GET', `/posts/${postId}`);
 		} catch (e: any) {
 			error = e.message || 'Failed to load post';
 		} finally {
