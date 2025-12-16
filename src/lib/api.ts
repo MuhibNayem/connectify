@@ -115,6 +115,7 @@ export interface GroupResponse {
 export interface CreateGroupRequest {
 	name: string;
 	member_ids: string[];
+	avatar?: string;
 }
 
 export interface AddMemberRequest {
@@ -401,6 +402,7 @@ export interface AddMemberRequest {
 
 export interface UpdateGroupRequest {
 	name?: string;
+	avatar?: string;
 }
 
 export interface UpdateGroupSettingsRequest {

@@ -9,11 +9,15 @@
 		addAdminToGroup,
 		removeAdminFromGroup,
 		updateGroupSettings,
+		updateGroup,
+		uploadFiles,
 		searchFriends
 	} from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import type { GroupResponse, UserShortResponse } from '$lib/api'; // Correct import source
 	import { fade, fly } from 'svelte/transition';
+	import { Camera } from '@lucide/svelte';
+	import { websocketMessages } from '$lib/websocket';
 
 	export let showModal: boolean;
 	export let groupId: string;
@@ -29,6 +33,9 @@
 	let searchResults: any[] = [];
 	let isSearching = false;
 	let searchTimeout: any;
+
+	// Avatar Update State
+	let isUpdatingAvatar = false;
 
 	$: if (showModal && groupId) {
 		fetchGroupDetails();
@@ -46,6 +53,44 @@
 			error = e.message;
 		} finally {
 			isLoading = false;
+		}
+	}
+
+	async function handleAvatarChange(event: Event) {
+		if (!amIAdmin) return;
+		const input = event.target as HTMLInputElement;
+		if (!input.files || !input.files[0]) return;
+
+		const file = input.files[0];
+		isUpdatingAvatar = true;
+		try {
+			const uploads = await uploadFiles([file]);
+			if (uploads && uploads.length > 0) {
+				const newAvatar = uploads[0].url;
+
+				// Optimistic Update: Update API first
+				await updateGroup(groupId, { avatar: newAvatar });
+
+				// Update Local State immediately
+				if (group) {
+					group.avatar = newAvatar;
+				}
+
+				// Broadcast to frontend components via WebSocket store (acts as event bus)
+				if (group) {
+					websocketMessages.set({
+						type: 'GROUP_UPDATED',
+						data: { ...group, avatar: newAvatar }
+					});
+				}
+
+				// Fetch fresh details in background to be sure
+				fetchGroupDetails();
+			}
+		} catch (e: any) {
+			alert(e.message);
+		} finally {
+			isUpdatingAvatar = false;
 		}
 	}
 
@@ -144,9 +189,49 @@
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between border-b p-6">
-				<h2 class="text-2xl font-bold text-gray-800">
-					{group?.name || 'Group Info'}
-				</h2>
+				<div class="flex items-center gap-4">
+					<!-- Avatar -->
+					<div class="group relative h-16 w-16 flex-shrink-0">
+						{#if group?.avatar}
+							<img
+								src={group.avatar}
+								alt={group.name}
+								class="h-16 w-16 rounded-full object-cover"
+							/>
+						{:else}
+							<div
+								class="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-2xl font-bold text-blue-600"
+							>
+								{group?.name?.[0]?.toUpperCase() || 'G'}
+							</div>
+						{/if}
+
+						{#if amIAdmin}
+							<label
+								class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-black/30 opacity-0 transition-opacity group-hover:opacity-100"
+							>
+								{#if isUpdatingAvatar}
+									<div
+										class="spinner h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent"
+									></div>
+								{:else}
+									<Camera size={24} color="white" />
+								{/if}
+								<input
+									type="file"
+									accept="image/*"
+									class="hidden"
+									on:change={handleAvatarChange}
+									disabled={isUpdatingAvatar}
+								/>
+							</label>
+						{/if}
+					</div>
+
+					<h2 class="text-2xl font-bold text-gray-800">
+						{group?.name || 'Group Info'}
+					</h2>
+				</div>
 				<button on:click={onClose} class="text-gray-500 hover:text-gray-700">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"

@@ -253,6 +253,7 @@ It orchestrates the display of messages and the message input field.
 					belongsToCurrentChat = true;
 				} else if (
 					type === 'user' &&
+					!newMessage.group_id && // Ensure it's not a group message
 					(newMessage.receiver_id === currentChatId || newMessage.sender_id === currentChatId)
 				) {
 					belongsToCurrentChat = true;
@@ -263,13 +264,23 @@ It orchestrates the display of messages and the message input field.
 				if (belongsToCurrentChat) {
 					// Check if message already exists in array (basic safety)
 					const messageExists = messages.find((m) => m.id === newMessage.id);
-					console.log('Message already exists in array:', !!messageExists);
 
 					if (!messageExists) {
 						// Immutable push
 						messages = [...messages, newMessage];
-						console.log('✓ New message added to array:', newMessage.id);
 					}
+				}
+				break;
+			}
+			case 'GROUP_UPDATED': {
+				const updatedGroup = event.data;
+				if (type === 'group' && currentChatId === updatedGroup.id && conversationPartner) {
+					console.log('GROUP_UPDATED event received for current chat:', updatedGroup);
+					conversationPartner = {
+						...conversationPartner,
+						name: updatedGroup.name,
+						avatar: updatedGroup.avatar
+					};
 				}
 				break;
 			}

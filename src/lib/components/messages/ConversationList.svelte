@@ -38,7 +38,7 @@ Fetches friends and groups to populate the list.
 					// Check if message belongs to this conversation
 					if (conv.is_group && newMessage.group_id === conv.id) {
 						shouldUpdate = true;
-					} else if (!conv.is_group) {
+					} else if (!conv.is_group && !newMessage.group_id) {
 						// For direct messages, check if either sender or receiver is this conversation
 						if (newMessage.sender_id === conv.id || newMessage.receiver_id === conv.id) {
 							shouldUpdate = true;
@@ -81,6 +81,16 @@ Fetches friends and groups to populate the list.
 						return conv;
 					});
 				}
+				break;
+			}
+			case 'GROUP_UPDATED': {
+				const updatedGroup = event.data;
+				conversations = conversations.map((conv) => {
+					if (conv.is_group && conv.id === updatedGroup.id) {
+						return { ...conv, name: updatedGroup.name, avatar: updatedGroup.avatar };
+					}
+					return conv;
+				});
 				break;
 			}
 		}

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { createGroup, searchFriends } from '$lib/api';
+	import { createGroup, searchFriends, uploadFiles } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import type { User } from '$lib/types';
+	import { Camera } from '@lucide/svelte';
 
 	export let showModal: boolean;
 	export let onGroupCreated: () => void;
@@ -16,6 +17,11 @@
 	let searchTerm = '';
 	let searchTimeout: any;
 
+	// Avatar State
+	let avatarFile: File | null = null;
+	let avatarPreview: string | null = null;
+	let avatarInput: HTMLInputElement;
+
 	$: if (showModal) {
 		groupName = '';
 		selectedParticipants = [];
@@ -23,6 +29,16 @@
 		searchTerm = '';
 		searchResults = [];
 		error = null;
+		avatarFile = null;
+		avatarPreview = null;
+	}
+
+	function handleFileChange(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (input.files && input.files[0]) {
+			avatarFile = input.files[0];
+			avatarPreview = URL.createObjectURL(avatarFile);
+		}
 	}
 
 	function handleSearchInput() {
@@ -57,16 +73,31 @@
 		selectedParticipants = selectedParticipants.filter((id) => id !== userId);
 	}
 
-	async function handleSubmit() {
+	async function handleSubmit(e?: Event) {
+		if (e) e.preventDefault();
 		if (!groupName.trim() || selectedParticipants.length === 0 || isCreatingGroup) return;
 
 		isCreatingGroup = true;
 		try {
+			let avatarUrl = '';
+			if (avatarFile) {
+				const uploads = await uploadFiles([avatarFile]);
+				if (uploads.length > 0) {
+					avatarUrl = uploads[0].url;
+				}
+			}
+
 			// Add current user to participants if not already there
 			const allParticipants = auth.state.user
 				? [...new Set([...selectedParticipants, auth.state.user.id])]
 				: selectedParticipants;
-			await createGroup({ name: groupName, member_ids: allParticipants });
+
+			await createGroup({
+				name: groupName,
+				member_ids: allParticipants,
+				avatar: avatarUrl
+			});
+
 			onGroupCreated();
 			showModal = false;
 		} catch (e: any) {
@@ -83,7 +114,36 @@
 	>
 		<div class="relative w-full max-w-md rounded-lg bg-white p-6 shadow-lg">
 			<h3 class="mb-4 text-xl font-semibold">Create New Group</h3>
-			<form on:submit|preventDefault={handleSubmit}>
+			<form onsubmit={handleSubmit}>
+				<!-- Avatar Upload -->
+				<div class="mb-6 flex justify-center">
+					<button
+						type="button"
+						class="group relative h-24 w-24 overflow-hidden rounded-full bg-gray-100 transition hover:opacity-90"
+						onclick={() => avatarInput.click()}
+					>
+						{#if avatarPreview}
+							<img src={avatarPreview} alt="Group Avatar" class="h-full w-full object-cover" />
+						{:else}
+							<div class="flex h-full items-center justify-center text-gray-400">
+								<Camera size={32} />
+							</div>
+						{/if}
+						<div
+							class="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100"
+						>
+							<span class="text-xs font-medium text-white">Change</span>
+						</div>
+					</button>
+					<input
+						type="file"
+						accept="image/*"
+						bind:this={avatarInput}
+						onchange={handleFileChange}
+						hidden
+					/>
+				</div>
+
 				<div class="mb-4">
 					<label for="groupName" class="mb-2 block text-sm font-medium text-gray-700"
 						>Group Name</label
@@ -111,7 +171,7 @@
 								<button
 									type="button"
 									class="ml-2 text-blue-600 hover:text-blue-800 focus:outline-none"
-									on:click={() => removeParticipant(participant.id)}
+									onclick={() => removeParticipant(participant.id)}
 								>
 									&times;
 								</button>
@@ -124,7 +184,7 @@
 						<input
 							type="text"
 							bind:value={searchTerm}
-							on:input={handleSearchInput}
+							oninput={handleSearchInput}
 							placeholder="Search friends..."
 							class="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:border-blue-500 focus:ring-blue-500"
 						/>
@@ -145,7 +205,7 @@
 										<button
 											type="button"
 											class="flex w-full items-center px-4 py-2 text-left text-sm hover:bg-gray-100"
-											on:click={() => addParticipant(friend)}
+											onclick={() => addParticipant(friend)}
 										>
 											<div
 												class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-xs font-bold text-gray-600"
@@ -175,7 +235,7 @@
 				<div class="flex justify-end space-x-2">
 					<button
 						type="button"
-						on:click={() => (showModal = false)}
+						onclick={() => (showModal = false)}
 						class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
 					>
 						Cancel
