@@ -378,6 +378,7 @@ export async function markConversationAsSeen(conversationId: string, timestamp: 
 export interface GroupResponse {
 	id: string;
 	name: string;
+	avatar?: string;
 	creator: UserShortResponse;
 	members: UserShortResponse[];
 	pending_members?: UserShortResponse[];

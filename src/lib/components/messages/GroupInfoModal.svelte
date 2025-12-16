@@ -37,9 +37,23 @@
 	// Avatar Update State
 	let isUpdatingAvatar = false;
 
+	import { onDestroy } from 'svelte';
+
 	$: if (showModal && groupId) {
 		fetchGroupDetails();
 	}
+
+	// Subscribe to WebSocket messages for real-time updates
+	const unsubscribe = websocketMessages.subscribe((event) => {
+		if (event?.type === 'GROUP_UPDATED' && group && event.data.id === group.id) {
+			console.log('GroupInfoModal received real-time update:', event.data);
+			group = event.data;
+		}
+	});
+
+	onDestroy(() => {
+		unsubscribe();
+	});
 
 	$: isTriggeredByMe = (userId: string) => userId === auth.state.user?.id;
 	$: amIAdmin = group?.admins.some((a) => a.id === auth.state.user?.id) ?? false;
@@ -202,7 +216,7 @@
 							<div
 								class="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-2xl font-bold text-blue-600"
 							>
-								{group?.name?.[0]?.toUpperCase() || 'G'}
+								{group?.name && group.name[0] ? group.name[0].toUpperCase() : 'G'}
 							</div>
 						{/if}
 
@@ -312,7 +326,10 @@
 															<span
 																class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600"
 															>
-																{user.username[0].toUpperCase()}
+																{(user.username && user.username[0]
+																	? user.username[0]
+																	: 'U'
+																).toUpperCase()}
 															</span>
 															<span>{user.username}</span>
 														</div>
@@ -340,7 +357,10 @@
 														/>
 													{:else}
 														<span class="text-lg font-bold text-gray-500"
-															>{member.username[0].toUpperCase()}</span
+															>{(member.username && member.username[0]
+																? member.username[0]
+																: 'M'
+															).toUpperCase()}</span
 														>
 													{/if}
 												</div>
@@ -390,7 +410,10 @@
 													/>
 												{:else}
 													<span class="text-lg font-bold text-purple-600"
-														>{admin.username[0].toUpperCase()}</span
+														>{(admin.username && admin.username[0]
+															? admin.username[0]
+															: 'A'
+														).toUpperCase()}</span
 													>
 												{/if}
 											</div>
@@ -427,7 +450,10 @@
 													class="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100"
 												>
 													<span class="font-bold text-yellow-600"
-														>{pending.username[0].toUpperCase()}</span
+														>{(pending.username && pending.username[0]
+															? pending.username[0]
+															: 'P'
+														).toUpperCase()}</span
 													>
 												</div>
 												<p class="font-medium text-gray-900">{pending.username}</p>

@@ -93,6 +93,20 @@ Fetches friends and groups to populate the list.
 				});
 				break;
 			}
+			case 'GROUP_CREATED': {
+				const newGroup = event.data;
+				const newConversation: ConversationSummary = {
+					id: newGroup.id,
+					name: newGroup.name,
+					avatar: newGroup.avatar,
+					is_group: true,
+					last_message_content: 'Group created',
+					last_message_timestamp: newGroup.created_at,
+					unread_count: 0
+				};
+				conversations = [newConversation, ...conversations];
+				break;
+			}
 		}
 	});
 
