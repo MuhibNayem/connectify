@@ -893,10 +893,10 @@ It orchestrates the display of messages and the message input field.
 				{/if}
 			</div>
 			<div>
-				<h3 class="font-semibold text-white">{conversationPartner.name}</h3>
+				<h3 class="font-semibold text-gray-900">{conversationPartner.name}</h3>
 				{#if conversationPartner.is_group}
 					<button
-						class="text-xs text-zinc-400 hover:text-white"
+						class="text-xs text-zinc-500 hover:text-zinc-700"
 						onclick={() => (showGroupInfo = true)}
 					>
 						View Group Info
@@ -923,14 +923,14 @@ It orchestrates the display of messages and the message input field.
 				<div class="ml-auto flex items-center gap-2">
 					<button
 						onclick={() => voiceCallService.startCall(currentChatId, 'audio')}
-						class="p-2 text-zinc-400 transition-colors hover:text-white"
+						class="p-2 text-zinc-400 transition-colors hover:text-zinc-600"
 						title="Voice Call"
 					>
 						<Phone size={20} />
 					</button>
 					<button
 						onclick={() => voiceCallService.startCall(currentChatId, 'video')}
-						class="p-2 text-zinc-400 transition-colors hover:text-white"
+						class="p-2 text-zinc-400 transition-colors hover:text-zinc-600"
 						title="Video Call"
 					>
 						<Video size={20} />
