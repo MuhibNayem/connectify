@@ -168,7 +168,8 @@ It orchestrates the display of messages and the message input field.
 			...(type === 'user' && { receiver_id: id }),
 			...(type === 'group' && { group_id: id })
 		};
-		messages.push(optimisticMessage);
+		// Immutable update to ensure reactivity
+		messages = [...messages, optimisticMessage];
 
 		try {
 			let payload: any;
@@ -237,8 +238,14 @@ It orchestrates the display of messages and the message input field.
 
 	// Handle real-time updates from WebSocket
 	websocketMessages.subscribe((event) => {
-		console.log('WebSocket event received in chat window:', event);
 		if (!event) return;
+		console.log(
+			'[ChatWindow] WebSocket event received:',
+			event.type,
+			event.data,
+			'Current Conversation:',
+			conversationId
+		);
 
 		const [type, currentChatId] = conversationId.split('-');
 
@@ -253,7 +260,7 @@ It orchestrates the display of messages and the message input field.
 					belongsToCurrentChat = true;
 				} else if (
 					type === 'user' &&
-					!newMessage.group_id && // Ensure it's not a group message
+					(!newMessage.group_id || newMessage.group_id === '000000000000000000000000') && // Ensure it's not a group message (handle zero ID)
 					(newMessage.receiver_id === currentChatId || newMessage.sender_id === currentChatId)
 				) {
 					belongsToCurrentChat = true;

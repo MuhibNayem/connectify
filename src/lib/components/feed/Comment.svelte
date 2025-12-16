@@ -21,7 +21,7 @@
 	async function fetchReplies() {
 		if (isReply) return;
 		try {
-			replies = await apiRequest('GET', `/feed/comments/${comment.id}/replies`) || [];
+			replies = (await apiRequest('GET', `/comments/${comment.id}/replies`)) || [];
 		} catch (error) {
 			console.error('Failed to fetch replies:', error);
 		}
@@ -30,11 +30,11 @@
 	async function handlePostReply(parentReplyId: string | null = null) {
 		if (!newReplyContent.trim()) return;
 		try {
-			const newReply = await apiRequest('POST', `/feed/comments/${comment.id}/replies`, {
+			const newReply = await apiRequest('POST', `/comments/${comment.id}/replies`, {
 				comment_id: comment.id, // Add comment_id to the request body
 				content: newReplyContent,
 				parent_reply_id: parentReplyId,
-				mentions: mentionedUsers.map(u => u.id)
+				mentions: mentionedUsers.map((u) => u.id)
 			});
 			const newReplyWithAuthor = { ...newReply, author: auth.state.user };
 			replies = [...replies, newReplyWithAuthor];
@@ -73,10 +73,10 @@
 	function handleMentionSelection(user: any) {
 		const before = newReplyContent.substring(0, mentionStartPos);
 		const after = newReplyContent.substring(mentionStartPos + 1 + mentionQuery.length);
-		
+
 		newReplyContent = `${before}@${user.username} ${after}`;
-		
-		if (!mentionedUsers.some(u => u.id === user.id)) {
+
+		if (!mentionedUsers.some((u) => u.id === user.id)) {
 			mentionedUsers.push(user);
 		}
 
@@ -86,54 +86,67 @@
 	onMount(() => {
 		fetchReplies();
 	});
-
 </script>
 
 <div class="flex items-start space-x-2">
-    <img 
-		src={comment.author?.avatar || 'https://github.com/shadcn.png'} 
-		alt={comment.author?.username} 
-		class="rounded-full {isReply ? 'w-6 h-6' : 'w-8 h-8'}" 
+	<img
+		src={comment.author?.avatar || 'https://github.com/shadcn.png'}
+		alt={comment.author?.username}
+		class="rounded-full {isReply ? 'h-6 w-6' : 'h-8 w-8'}"
 	/>
-    <div class="flex-1">
-        <div class="bg-gray-100 rounded-xl px-3 py-2">
-            <a href={`/profile/${comment.author?.id}`} class="font-semibold text-sm hover:underline">{comment.author?.username || '[Deleted User]'}</a>
-            <p class="text-sm text-gray-800">{comment.content}</p>
-        </div>
-        <div class="text-xs text-gray-500 flex items-center space-x-2 px-3">
-            {#if !isReply}
-                <button class="font-semibold hover:underline" onclick={() => showReplyForm = !showReplyForm}>Reply</button>
-                <span>·</span>
-            {/if}
-            <span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
-        </div>
+	<div class="flex-1">
+		<div class="rounded-xl bg-gray-100 px-3 py-2">
+			<a href={`/profile/${comment.author?.id}`} class="text-sm font-semibold hover:underline"
+				>{comment.author?.username || '[Deleted User]'}</a
+			>
+			<p class="text-sm text-gray-800">{comment.content}</p>
+		</div>
+		<div class="flex items-center space-x-2 px-3 text-xs text-gray-500">
+			{#if !isReply}
+				<button
+					class="font-semibold hover:underline"
+					onclick={() => (showReplyForm = !showReplyForm)}>Reply</button
+				>
+				<span>·</span>
+			{/if}
+			<span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
+		</div>
 
-        {#if showReplyForm}
-            <div class="relative mt-2 flex items-start space-x-2">
-				<img src={auth.state.user?.avatar || 'https://github.com/shadcn.png'} alt="Your avatar" class="w-6 h-6 rounded-full" />
-				<div class="flex-1 relative">
-					<textarea 
-						bind:value={newReplyContent} 
-						class="block w-full bg-gray-100 border-transparent rounded-2xl px-4 py-2 text-sm focus:ring-0 focus:border-transparent"
+		{#if showReplyForm}
+			<div class="relative mt-2 flex items-start space-x-2">
+				<img
+					src={auth.state.user?.avatar || 'https://github.com/shadcn.png'}
+					alt="Your avatar"
+					class="h-6 w-6 rounded-full"
+				/>
+				<div class="relative flex-1">
+					<textarea
+						bind:value={newReplyContent}
+						class="block w-full rounded-2xl border-transparent bg-gray-100 px-4 py-2 text-sm focus:border-transparent focus:ring-0"
 						placeholder="Write a reply..."
 						oninput={handleInput}
-						onblur={() => setTimeout(() => showMentions = false, 150)}
-						onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !showMentions) { e.preventDefault(); handlePostReply(); } }}
+						onblur={() => setTimeout(() => (showMentions = false), 150)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' && !e.shiftKey && !showMentions) {
+								e.preventDefault();
+								handlePostReply();
+							}
+						}}
 					></textarea>
 					{#if showMentions}
-						<div class="absolute z-10 mt-1 w-full bottom-full mb-1">
+						<div class="absolute bottom-full z-10 mb-1 mt-1 w-full">
 							<UserMentionDropdown query={mentionQuery} onSelection={handleMentionSelection} />
 						</div>
 					{/if}
 				</div>
 			</div>
-        {/if}
+		{/if}
 
-        <!-- Replies -->
-        <div class="mt-2 space-y-2">
-            {#each replies as reply (reply.id)}
-                <svelte:self comment={reply} isReply={true} />
-            {/each}
-        </div>
-    </div>
+		<!-- Replies -->
+		<div class="mt-2 space-y-2">
+			{#each replies as reply (reply.id)}
+				<svelte:self comment={reply} isReply={true} />
+			{/each}
+		</div>
+	</div>
 </div>

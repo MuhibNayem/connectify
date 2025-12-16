@@ -30,7 +30,7 @@
 	async function handlePostComment() {
 		if (!newCommentContent.trim()) return;
 		try {
-			const newComment = await apiRequest('POST', '/feed/comments', {
+			const newComment = await apiRequest('POST', '/comments', {
 				post_id: postId,
 				content: newCommentContent,
 				mentions: mentionedUsers.map((u) => u.id)

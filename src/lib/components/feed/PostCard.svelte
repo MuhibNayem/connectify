@@ -42,6 +42,7 @@
 	$: currentUserId = auth.state.user?.id;
 
 	let userReactionId: string | null = null;
+	let userReactionType: string | null = null;
 	$: isLikedByCurrentUser = userReactionId !== null;
 
 	onMount(() => {
@@ -54,8 +55,10 @@
 					);
 					if (userReaction) {
 						userReactionId = userReaction.id;
+						userReactionType = userReaction.type;
 					} else {
 						userReactionId = null;
+						userReactionType = null;
 					}
 				} catch (e) {
 					console.error('Failed to fetch reactions for post:', e);
@@ -107,22 +110,34 @@
 			return;
 		}
 
+		// For simplicity, we'll assume 'LIKE' is the only type for this button
+		const type = 'LIKE';
+
 		try {
 			if (isLikedByCurrentUser) {
 				await apiRequest(
 					'DELETE',
-					`/feed/reactions/${userReactionId}?targetId=${post.id}&targetType=post`
+					`/reactions/${userReactionId}?targetId=${post.id}&targetType=post`
 				);
 				userReactionId = null;
-				post.total_reactions -= 1;
+				post.total_reactions--;
+				if (post.specific_reaction_counts && post.specific_reaction_counts[userReactionType]) {
+					post.specific_reaction_counts[userReactionType]--;
+				}
+				userReactionType = null;
 			} else {
-				const newReaction = await apiRequest('POST', '/feed/reactions', {
+				// Add reaction
+				const newReaction = await apiRequest('POST', '/reactions', {
 					target_id: post.id,
 					target_type: 'post',
-					type: 'LIKE'
+					type: type
 				});
 				userReactionId = newReaction.id;
 				post.total_reactions += 1;
+				userReactionType = type; // Set the type of the new reaction
+				if (post.specific_reaction_counts) {
+					post.specific_reaction_counts[type] = (post.specific_reaction_counts[type] || 0) + 1;
+				}
 			}
 		} catch (e: any) {
 			alert(`Failed to toggle like: ${e.message}`);
