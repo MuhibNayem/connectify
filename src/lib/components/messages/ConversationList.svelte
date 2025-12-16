@@ -25,89 +25,106 @@ Fetches friends and groups to populate the list.
 	});
 
 	// Subscribe to WebSocket messages for real-time updates
-	websocketMessages.subscribe((event) => {
-		if (!event) return;
+	$effect(() => {
+		const unsubscribe = websocketMessages.subscribe((event) => {
+			if (!event) return;
 
-		switch (event.type) {
-			case 'MESSAGE_CREATED': {
-				const newMessage = event.data;
-				// Update the conversation's last message and timestamp
-				conversations = conversations.map((conv) => {
-					let shouldUpdate = false;
+			switch (event.type) {
+				case 'MESSAGE_CREATED': {
+					const newMessage = event.data;
+					console.log('[ConversationList] Received MESSAGE_CREATED:', newMessage);
 
-					// Check if message belongs to this conversation
-					if (conv.is_group && newMessage.group_id === conv.id) {
-						shouldUpdate = true;
-					} else if (!conv.is_group && !newMessage.group_id) {
-						// For direct messages, check if either sender or receiver is this conversation
-						if (newMessage.sender_id === conv.id || newMessage.receiver_id === conv.id) {
-							shouldUpdate = true;
-						}
-					}
-
-					if (shouldUpdate) {
-						// Update last message info
-						return {
-							...conv,
-							last_message_content: newMessage.content || 'Sent a file',
-							last_message_timestamp: newMessage.created_at,
-							last_message_sender_id: newMessage.sender_id,
-							last_message_sender_name: newMessage.sender_name,
-							// Increment unread count if message is from someone else, reset to 0 if from current user
-							unread_count:
-								newMessage.sender_id !== auth.state.user?.id ? (conv.unread_count || 0) + 1 : 0
-						};
-					}
-					return conv;
-				});
-
-				// Re-sort conversations by timestamp
-				conversations = conversations.sort((a, b) => {
-					const timeA = a.last_message_timestamp ? new Date(a.last_message_timestamp).getTime() : 0;
-					const timeB = b.last_message_timestamp ? new Date(b.last_message_timestamp).getTime() : 0;
-					return timeB - timeA;
-				});
-				break;
-			}
-			case 'CONVERSATION_SEEN_UPDATE': {
-				// Reset unread count for the conversation that was marked as seen
-				const { conversation_id, user_id } = event.data;
-				// Only reset if the current user marked it as seen
-				if (user_id === auth.state.user?.id) {
+					// Update the conversation's last message and timestamp
+					let updated = false;
 					conversations = conversations.map((conv) => {
-						if (conv.id === conversation_id) {
-							return { ...conv, unread_count: 0 };
+						let shouldUpdate = false;
+
+						// Check if message belongs to this conversation
+						if (conv.is_group && newMessage.group_id === conv.id) {
+							shouldUpdate = true;
+						} else if (!conv.is_group && !newMessage.group_id) {
+							// For direct messages, check if either sender or receiver is this conversation
+							if (newMessage.sender_id === conv.id || newMessage.receiver_id === conv.id) {
+								shouldUpdate = true;
+							}
+						}
+
+						if (shouldUpdate) {
+							updated = true;
+							// Update last message info
+							return {
+								...conv,
+								last_message_content: newMessage.content || 'Sent a file',
+								last_message_timestamp: newMessage.created_at,
+								last_message_sender_id: newMessage.sender_id,
+								last_message_sender_name: newMessage.sender_name,
+								last_message_is_encrypted: newMessage.is_encrypted,
+								// Increment unread count if message is from someone else, reset to 0 if from current user
+								unread_count:
+									newMessage.sender_id !== auth.state.user?.id ? (conv.unread_count || 0) + 1 : 0
+							};
 						}
 						return conv;
 					});
+
+					// Re-sort conversations by timestamp
+					conversations = conversations.sort((a, b) => {
+						const timeA = a.last_message_timestamp
+							? new Date(a.last_message_timestamp).getTime()
+							: 0;
+						const timeB = b.last_message_timestamp
+							? new Date(b.last_message_timestamp).getTime()
+							: 0;
+						return timeB - timeA;
+					});
+					break;
 				}
-				break;
-			}
-			case 'GROUP_UPDATED': {
-				const updatedGroup = event.data;
-				conversations = conversations.map((conv) => {
-					if (conv.is_group && conv.id === updatedGroup.id) {
-						return { ...conv, name: updatedGroup.name, avatar: updatedGroup.avatar };
+				case 'CONVERSATION_SEEN_UPDATE': {
+					// Reset unread count for the conversation that was marked as seen
+					const { conversation_id, user_id } = event.data;
+					// Only reset if the current user marked it as seen
+					if (user_id === auth.state.user?.id) {
+						conversations = conversations.map((conv) => {
+							if (conv.id === conversation_id) {
+								return { ...conv, unread_count: 0 };
+							}
+							return conv;
+						});
 					}
-					return conv;
-				});
-				break;
+					break;
+				}
+				case 'GROUP_UPDATED': {
+					const updatedGroup = event.data;
+					conversations = conversations.map((conv) => {
+						if (conv.is_group && conv.id === updatedGroup.id) {
+							return { ...conv, name: updatedGroup.name, avatar: updatedGroup.avatar };
+						}
+						return conv;
+					});
+					break;
+				}
+				case 'GROUP_CREATED': {
+					const newGroup = event.data;
+					// Only add if I am a member (implied by receiving the event usually?)
+					// Check if already exists
+					if (!conversations.some((c) => c.id === newGroup.id)) {
+						const newConversation: ConversationSummary = {
+							id: newGroup.id,
+							name: newGroup.name,
+							avatar: newGroup.avatar,
+							is_group: true,
+							last_message_content: 'Group created',
+							last_message_timestamp: newGroup.created_at,
+							unread_count: 0
+						};
+						conversations = [newConversation, ...conversations];
+					}
+					break;
+				}
 			}
-			case 'GROUP_CREATED': {
-				const newGroup = event.data;
-				const newConversation: ConversationSummary = {
-					id: newGroup.id,
-					name: newGroup.name,
-					avatar: newGroup.avatar,
-					is_group: true,
-					last_message_content: 'Group created',
-					last_message_timestamp: newGroup.created_at,
-					unread_count: 0
-				};
-				conversations = [newConversation, ...conversations];
-				break;
-			}
-		}
+		});
+
+		return unsubscribe;
 	});
 
 	onMount(async () => {
@@ -137,6 +154,18 @@ Fetches friends and groups to populate the list.
 	function getConversationUrl(conv: ConversationSummary): string {
 		const typePrefix = conv.is_group ? 'group' : 'user';
 		return `/messages/${typePrefix}-${conv.id}`;
+	}
+
+	// Helper to display encrypted message placeholder
+	function getDisplayContent(
+		content: string | undefined,
+		isEncrypted: boolean | undefined
+	): string {
+		if (!content) return '';
+		if (isEncrypted) {
+			return '🔒 Encrypted message';
+		}
+		return content;
 	}
 </script>
 
@@ -216,7 +245,7 @@ Fetches friends and groups to populate the list.
 													>{conv.last_message_sender_name}:
 												</span>
 											{/if}
-											{conv.last_message_content}
+											{getDisplayContent(conv.last_message_content, conv.last_message_is_encrypted)}
 										</p>
 										{#if conv.last_message_timestamp}
 											<span class="mx-1">•</span>

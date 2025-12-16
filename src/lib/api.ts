@@ -61,6 +61,7 @@ export interface ConversationSummary {
 	last_message_timestamp?: string;
 	last_message_sender_id?: string;
 	last_message_sender_name?: string;
+	last_message_is_encrypted?: boolean;
 	unread_count: number;
 }
 
@@ -473,6 +474,26 @@ export async function uploadFiles(files: File[]): Promise<{ url: string; type: s
 	files.forEach((f) => formData.append('files[]', f));
 	return apiRequest('POST', '/upload', formData, true);
 }
+
+export async function getUserByID(userId: string): Promise<import('$lib/types').User> {
+	return apiRequest('GET', `/users/${userId}`, undefined, true);
+}
+
+// E2EE Key Management
+export interface UserKeys {
+	public_key: string;
+	encrypted_private_key?: string;
+	key_backup_iv?: string;
+	key_backup_salt?: string;
+}
+
+export async function updateUserKeys(keys: UserKeys): Promise<void> {
+	return apiRequest('PUT', '/users/me/keys', keys, true);
+}
+
+// Note: getUserPublicKey logic effectively just reuses getUserProfile / getUserById
+// but we add a semantic helper if needed. For now, we rely on the User object having public_key.
+
 
 
 // Community Types & APIs

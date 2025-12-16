@@ -2,13 +2,7 @@ import { browser } from '$app/environment';
 import { register as apiRegister } from '$lib/api'; // Renamed to avoid conflict
 
 // Define the shape of the user and auth state
-interface User {
-    id: string;
-    username: string;
-    email: string;
-    avatar?: string;
-    // Add any other user properties you need
-}
+import type { User } from '$lib/types';
 
 interface AuthState {
     user: User | null;

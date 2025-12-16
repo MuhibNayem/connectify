@@ -25,6 +25,10 @@ export interface Message {
 	reply_to_message_id?: string; // Added
 	created_at: string;
 	updated_at?: string;
+	// E2EE
+	is_encrypted?: boolean;
+	iv?: string;
+	_is_decrypted?: boolean; // Client-side flag
 	// Potentially add sender/receiver/group objects if populated by backend
 	sender?: {
 		id: string;
@@ -77,6 +81,11 @@ export interface User {
 	privacy_settings?: PrivacySettings;
 	notification_settings?: NotificationSettings;
 	created_at?: string;
+	// E2EE
+	public_key?: string;
+	encrypted_private_key?: string;
+	key_backup_iv?: string;
+	key_backup_salt?: string;
 }
 
 export interface PrivacySettings {
