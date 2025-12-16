@@ -6,6 +6,7 @@
 	import { setUnreadCount } from '$lib/stores/notifications';
 	import '../app.css';
 	import Toast from '$lib/components/ui/toast/Toast.svelte';
+	import CallContainer from '$lib/components/messages/CallContainer.svelte';
 
 	onMount(() => {
 		auth.initialize();
@@ -22,17 +23,16 @@
 					const response = await getUnreadNotificationCount();
 					setUnreadCount(response.count);
 				} catch (error) {
-					console.error("Failed to fetch initial unread notification count:", error);
+					console.error('Failed to fetch initial unread notification count:', error);
 				}
 			})();
-
 		} else {
 			disconnectWebSocket();
 		}
 	});
-
 </script>
 
 <Toast />
+<CallContainer />
 
 <slot />

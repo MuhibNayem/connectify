@@ -26,6 +26,8 @@ It orchestrates the display of messages and the message input field.
 	import GroupInfoModal from './GroupInfoModal.svelte';
 	import * as crypto from '$lib/crypto';
 	import * as keyStore from '$lib/key_store';
+	import { voiceCallService } from '$lib/stores/voice-call.svelte';
+	import { Phone } from '@lucide/svelte';
 
 	let showGroupInfo = $state(false);
 
@@ -891,13 +893,20 @@ It orchestrates the display of messages and the message input field.
 				{/if}
 			</div>
 			<div>
-				<h2 class="text-lg font-bold">{conversationPartner.name}</h2>
-				{#if !conversationPartner.is_group}
-					<p class="text-sm text-gray-500">
+				<h3 class="font-semibold text-white">{conversationPartner.name}</h3>
+				{#if conversationPartner.is_group}
+					<button
+						class="text-xs text-zinc-400 hover:text-white"
+						onclick={() => (showGroupInfo = true)}
+					>
+						View Group Info
+					</button>
+				{:else}
+					<p class="text-xs text-zinc-400">
 						{#if presenceState[conversationPartner.id]?.status === 'online'}
-							Online
+							<span class="text-emerald-500">Online</span>
 						{:else if presenceState[conversationPartner.id]?.last_seen}
-							Active {formatDistanceToNow(
+							Last seen {formatDistanceToNow(
 								new Date(presenceState[conversationPartner.id].last_seen * 1000),
 								{
 									addSuffix: true
@@ -910,6 +919,15 @@ It orchestrates the display of messages and the message input field.
 				{/if}
 			</div>
 
+			{#if conversationType === 'user'}
+				<button
+					class="mr-2 rounded-full p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+					onclick={() => voiceCallService.startCall(currentChatId)}
+					title="Voice Call"
+				>
+					<Phone size={20} />
+				</button>
+			{/if}
 			{#if conversationPartner.is_group}
 				<div class="ml-auto flex items-center gap-2">
 					<button

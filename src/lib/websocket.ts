@@ -3,6 +3,8 @@ import { browser } from '$app/environment';
 import { addNotification } from './stores/notifications';
 import type { Notification } from './api';
 import { updateUserStatus } from './stores/presence';
+import { voiceCallService } from './stores/voice-call.svelte';
+
 
 export interface WebSocketEvent {
 	type: string;
@@ -80,6 +82,10 @@ export function connectWebSocket() {
 					const { user_id, status, last_seen } = parsedEvent.data;
 					updateUserStatus(user_id, status, last_seen);
 					break;
+				case 'VOICE_CALL_SIGNAL':
+					// Ensure parsedEvent.data is passed correctly
+					voiceCallService.handleIncomingSignal(parsedEvent.data);
+					break;
 				// For other events, we update the generic store for other components to use
 				default:
 					websocketMessages.set(parsedEvent);
@@ -106,15 +112,15 @@ export function connectWebSocket() {
 }
 
 export function disconnectWebSocket() {
-    if (ws) {
-        if (reconnectInterval) {
-            clearInterval(reconnectInterval);
-            reconnectInterval = null;
-        }
-        ws.close();
-        ws = null;
-        console.log('WebSocket disconnected manually.');
-    }
+	if (ws) {
+		if (reconnectInterval) {
+			clearInterval(reconnectInterval);
+			reconnectInterval = null;
+		}
+		ws.close();
+		ws = null;
+		console.log('WebSocket disconnected manually.');
+	}
 }
 
 export function sendWebSocketMessage(type: string, payload: any) {
