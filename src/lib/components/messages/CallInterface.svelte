@@ -2,6 +2,7 @@
 	import { callState, voiceCallService } from '$lib/stores/voice-call.svelte';
 	import { Mic, MicOff, PhoneOff, User } from '@lucide/svelte';
 	import { onMount } from 'svelte';
+	import { draggable } from '$lib/actions/draggable';
 	import Avatar from '$lib/components/ui/avatar/avatar.svelte';
 	import AvatarFallback from '$lib/components/ui/avatar/avatar-fallback.svelte';
 	import AvatarImage from '$lib/components/ui/avatar/avatar-image.svelte';
@@ -107,21 +108,38 @@
 	<audio bind:this={audioElement} autoplay playsinline controls={false} class="hidden"></audio>
 
 	<div
-		class="flex w-full max-w-md flex-col items-center gap-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-12 shadow-2xl"
+		class="relative flex flex-col items-center gap-8 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl transition-all duration-200"
+		class:w-full={callType === 'video'}
+		class:h-full={callType === 'video'}
+		class:max-w-none={callType === 'video'}
+		class:p-0={callType === 'video'}
+		class:game-mode={callType === 'video'}
+		class:max-w-4xl={callType !== 'video'}
+		class:p-8={callType !== 'video'}
+		style={callType !== 'video'
+			? 'resize: both; overflow: hidden; min-width: 320px; min-height: 480px;'
+			: ''}
 	>
-		<div class="flex flex-col items-center gap-4">
-			<Avatar class="h-32 w-32 border-4 border-zinc-800 shadow-xl">
-				<AvatarImage
-					src={userInfo?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${targetId}`}
-					alt={userInfo?.username || targetId}
-				/>
-				<AvatarFallback><User size={48} /></AvatarFallback>
-			</Avatar>
+		>
+		<div
+			class="flex flex-col items-center gap-4 {callType === 'video'
+				? 'absolute top-8 z-10 rounded-xl bg-black/50 p-4'
+				: ''}"
+		>
+			{#if callType !== 'video'}
+				<Avatar class="h-32 w-32 border-4 border-zinc-800 shadow-xl">
+					<AvatarImage
+						src={userInfo?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${targetId}`}
+						alt={userInfo?.username || targetId}
+					/>
+					<AvatarFallback><User size={48} /></AvatarFallback>
+				</Avatar>
+			{/if}
 			<div class="text-center">
 				<h2 class="text-2xl font-semibold text-white">
 					{userInfo ? userInfo.full_name || userInfo.username : targetId || 'Unknown User'}
 				</h2>
-				<p class="mt-1 text-zinc-400">
+				<p class="text-zinc-400" class:text-white={callType === 'video'}>
 					{#if status === 'connected'}
 						{formatDuration(duration)}
 					{:else if status === 'calling'}
@@ -134,9 +152,9 @@
 		</div>
 
 		{#if callType === 'video'}
-			<!-- Video Container -->
-			<div class="relative mt-6 aspect-video w-full overflow-hidden rounded-xl bg-black">
-				<!-- Remote Video (Large) -->
+			<!-- Video Container Full Screen -->
+			<div class="absolute inset-0 h-full w-full bg-black">
+				<!-- Remote Video (Full Screen) -->
 				<video
 					bind:this={remoteVideoElement}
 					autoplay
@@ -144,22 +162,29 @@
 					class="h-full w-full object-cover"
 				></video>
 
-				<!-- Local Video (PIP) -->
+				<!-- Local Video (PIP) - Draggable -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="absolute bottom-4 right-4 h-24 w-32 overflow-hidden rounded-lg border-2 border-zinc-800 bg-zinc-900 shadow-xl"
+					use:draggable={{ bounds: document.body }}
+					class="absolute bottom-24 right-4 z-20 h-48 w-72 cursor-grab overflow-hidden rounded-xl border-2 border-white/20 bg-black/50 shadow-2xl transition-colors hover:border-white hover:shadow-white/10 active:cursor-grabbing"
 				>
 					<video
 						bind:this={localVideoElement}
 						autoplay
 						playsinline
 						muted
-						class="h-full w-full object-cover"
+						class="h-full w-full scale-x-[-1] transform object-cover"
 					></video>
 				</div>
 			</div>
 		{/if}
 
-		<div class="mt-4 flex items-center gap-6">
+		<div
+			class="mt-4 flex items-center gap-6"
+			class:absolute={callType === 'video'}
+			class:bottom-8={callType === 'video'}
+			class:z-50={callType === 'video'}
+		>
 			<button
 				onclick={toggleMute}
 				class="group flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 transition-all hover:bg-zinc-700"
