@@ -120,7 +120,6 @@
 			? 'resize: both; overflow: hidden; min-width: 320px; min-height: 480px;'
 			: ''}
 	>
-		>
 		<div
 			class="flex flex-col items-center gap-4 {callType === 'video'
 				? 'absolute top-8 z-10 rounded-xl bg-black/50 p-4'
