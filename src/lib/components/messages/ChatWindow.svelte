@@ -27,7 +27,7 @@ It orchestrates the display of messages and the message input field.
 	import * as crypto from '$lib/crypto';
 	import * as keyStore from '$lib/key_store';
 	import { voiceCallService } from '$lib/stores/voice-call.svelte';
-	import { Phone } from '@lucide/svelte';
+	import { Phone, Video } from '@lucide/svelte';
 
 	let showGroupInfo = $state(false);
 
@@ -920,13 +920,22 @@ It orchestrates the display of messages and the message input field.
 			</div>
 
 			{#if conversationType === 'user'}
-				<button
-					class="mr-2 rounded-full p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-					onclick={() => voiceCallService.startCall(currentChatId)}
-					title="Voice Call"
-				>
-					<Phone size={20} />
-				</button>
+				<div class="ml-auto flex items-center gap-2">
+					<button
+						onclick={() => voiceCallService.startCall(currentChatId, 'audio')}
+						class="p-2 text-zinc-400 transition-colors hover:text-white"
+						title="Voice Call"
+					>
+						<Phone size={20} />
+					</button>
+					<button
+						onclick={() => voiceCallService.startCall(currentChatId, 'video')}
+						class="p-2 text-zinc-400 transition-colors hover:text-white"
+						title="Video Call"
+					>
+						<Video size={20} />
+					</button>
+				</div>
 			{/if}
 			{#if conversationPartner.is_group}
 				<div class="ml-auto flex items-center gap-2">

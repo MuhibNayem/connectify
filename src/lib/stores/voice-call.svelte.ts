@@ -1,5 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import { sendWebSocketMessage } from '$lib/websocket';
+import { toastStore } from '$lib/stores/toast';
 
 export interface CallState {
     status: 'idle' | 'calling' | 'incoming' | 'connected' | 'ended';
@@ -7,12 +8,14 @@ export interface CallState {
     targetId: string | null;
     localStream: MediaStream | null;
     remoteStream: MediaStream | null;
+    callType: 'audio' | 'video';
 }
 
 export interface SignalingMessage {
     signal_type: 'OFFER' | 'ANSWER' | 'ICE_CANDIDATE' | 'END_CALL' | 'REJECT_CALL' | 'BUSY';
     signal_data?: any;
     caller_id?: string;
+    call_type?: 'audio' | 'video';
 }
 
 class VoiceCallService {
@@ -26,11 +29,12 @@ class VoiceCallService {
             callerId: null,
             targetId: null,
             localStream: null,
-            remoteStream: null
+            remoteStream: null,
+            callType: 'audio'
         });
     }
 
-    async initializePeerConnection(targetId: string, isInitiator: boolean) {
+    async initializePeerConnection(targetId: string, isInitiator: boolean, callType: 'audio' | 'video' = 'audio') {
         const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -69,38 +73,79 @@ class VoiceCallService {
 
         // Add local stream tracks
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            // Explicit Secure Context Check
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                const isSecure = window.isSecureContext;
+                const errorMsg = isSecure
+                    ? 'Media devices API not available.'
+                    : 'Media access requires HTTPS or localhost.';
+                console.error(`[VoiceCall] ${errorMsg} (isSecureContext: ${isSecure})`);
+                toastStore.add(errorMsg, 'error');
+                this.cleanup('Media API missing');
+                return false;
+            }
+
+            const constraints = {
+                audio: true,
+                video: callType === 'video'
+            };
+            console.log('[VoiceCall] Requesting user media with constraints:', constraints);
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('[VoiceCall] Media stream obtained:', stream.id);
+
             this.state.update(s => ({ ...s, localStream: stream }));
             stream.getTracks().forEach(track => {
                 this.peerConnection?.addTrack(track, stream);
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('[VoiceCall] Error accessing media devices:', error);
+
+            let errorMessage = 'Could not access camera/microphone.';
+            if (error.name === 'NotAllowedError') {
+                errorMessage = 'Please allow camera and microphone access to make calls.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage = 'No camera or microphone found.';
+            } else if (error.name === 'NotReadableError') {
+                errorMessage = 'Camera or microphone is already in use.';
+            }
+
+            toastStore.add(errorMessage, 'error');
             this.cleanup('Error accessing media');
-            return;
+            return false;
         }
-        // Removed automatic pendingCandidates processing from here
+        return true;
     }
 
-    async startCall(targetId: string) {
+    async startCall(targetId: string, type: 'audio' | 'video' = 'audio') {
         if (this.getSnapshot().status !== 'idle') return;
 
-        this.state.update(s => ({ ...s, status: 'calling', targetId }));
-        await this.initializePeerConnection(targetId, true);
+        this.state.update(s => ({ ...s, status: 'calling', targetId, callType: type }));
+        const initialized = await this.initializePeerConnection(targetId, true, type);
 
-        const offer = await this.peerConnection!.createOffer();
-        await this.peerConnection!.setLocalDescription(offer);
+        if (!initialized || !this.peerConnection) {
+            console.error('[VoiceCall] Failed to initialize peer connection. Aborting call.');
+            return;
+        }
 
-        sendWebSocketMessage('call_signal', {
-            target_id: targetId,
-            signal_type: 'OFFER',
-            signal_data: offer
-        });
+        try {
+            const offer = await this.peerConnection.createOffer();
+            await this.peerConnection.setLocalDescription(offer);
+
+            sendWebSocketMessage('call_signal', {
+                target_id: targetId,
+                signal_type: 'OFFER',
+                signal_data: offer,
+                call_type: type
+            });
+        } catch (error) {
+            console.error('[VoiceCall] Error creating offer:', error);
+            this.cleanup('Error creating offer');
+        }
     }
 
     async handleIncomingSignal(message: SignalingMessage) {
-        const { signal_type, signal_data, caller_id } = message;
-        console.log('[VoiceCall] Incoming Signal:', signal_type, 'Caller:', caller_id);
+        const { signal_type, signal_data, caller_id, call_type } = message;
+        console.log('[VoiceCall] Incoming Signal:', signal_type, 'Caller:', caller_id, 'Type:', call_type);
         const current = this.getSnapshot();
 
         switch (signal_type) {
@@ -122,7 +167,14 @@ class VoiceCallService {
                     });
                     return;
                 }
-                this.state.update(s => ({ ...s, status: 'incoming', callerId: caller_id!, targetId: caller_id! }));
+                const incomingCallType = call_type || 'audio';
+                this.state.update(s => ({
+                    ...s,
+                    status: 'incoming',
+                    callerId: caller_id!,
+                    targetId: caller_id!,
+                    callType: incomingCallType
+                }));
                 (this as any).pendingOffer = signal_data;
                 break;
 
@@ -171,7 +223,8 @@ class VoiceCallService {
 
         try {
             // Initialize and set remote description (Offer)
-            await this.initializePeerConnection(callerId, false);
+            // Use the callType stored in state from the offer (or default to audio if unknown)
+            await this.initializePeerConnection(callerId, false, current.callType || 'audio');
             const offer = (this as any).pendingOffer;
 
             if (!offer) {
@@ -258,7 +311,8 @@ class VoiceCallService {
             callerId: null,
             targetId: null,
             localStream: null,
-            remoteStream: null
+            remoteStream: null,
+            callType: 'audio'
         });
     }
 

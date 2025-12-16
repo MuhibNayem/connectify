@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { callState, voiceCallService } from '$lib/stores/voice-call.svelte';
-	import { Phone, PhoneOff, User } from '@lucide/svelte';
+	import { Phone, PhoneOff, User, Video } from '@lucide/svelte';
 	import Avatar from '$lib/components/ui/avatar/avatar.svelte';
 	import AvatarImage from '$lib/components/ui/avatar/avatar-image.svelte';
 	import AvatarFallback from '$lib/components/ui/avatar/avatar-fallback.svelte';
@@ -8,6 +8,7 @@
 	import { getUserByID } from '$lib/api';
 
 	let callerId = $derived($callState.callerId || 'Unknown');
+	let callType = $derived($callState.callType);
 	let userInfo = $state<{ full_name?: string; username: string; avatar?: string } | null>(null);
 
 	$effect(() => {
@@ -59,11 +60,18 @@
 				<AvatarFallback><User size={32} /></AvatarFallback>
 			</Avatar>
 			<div class="text-center">
-				<h3 class="text-xl font-semibold text-white">
-					{userInfo ? userInfo.full_name || userInfo.username : callerId}
-				</h3>
-
-				<p class="text-zinc-400">Incoming voice call...</p>
+				<h2 class="text-2xl font-semibold text-white">
+					{userInfo ? userInfo.full_name || userInfo.username : callerId || 'Unknown User'}
+				</h2>
+				<div class="mt-1 flex items-center justify-center gap-2 text-zinc-400">
+					{#if callType === 'video'}
+						<Video size={16} />
+						<span>Incoming Video Call...</span>
+					{:else}
+						<Phone size={16} />
+						<span>Incoming Voice Call...</span>
+					{/if}
+				</div>
 			</div>
 		</div>
 

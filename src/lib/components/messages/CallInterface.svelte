@@ -11,12 +11,16 @@
 	let duration = $state(0);
 	let interval: ReturnType<typeof setInterval>;
 	let audioElement: HTMLAudioElement; // Audio element reference
+	let localVideoElement: HTMLVideoElement;
+	let remoteVideoElement: HTMLVideoElement;
 	let userInfo = $state<{ full_name?: string; username: string; avatar?: string } | null>(null);
 
 	// Derive connection status from store
 	let status = $derived($callState.status);
 	let targetId = $derived($callState.targetId || $callState.callerId);
 	let remoteStream = $derived($callState.remoteStream);
+	let localStream = $derived($callState.localStream);
+	let callType = $derived($callState.callType);
 
 	// Fetch user info when targetId is available, resiliently
 	$effect(() => {
@@ -84,6 +88,18 @@
 			audioElement.play().catch((e) => console.error('Error playing remote audio:', e));
 		}
 	});
+
+	// Handle video streams
+	$effect(() => {
+		if (callType === 'video') {
+			if (localStream && localVideoElement) {
+				localVideoElement.srcObject = localStream;
+			}
+			if (remoteStream && remoteVideoElement) {
+				remoteVideoElement.srcObject = remoteStream;
+			}
+		}
+	});
 </script>
 
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -116,6 +132,32 @@
 				</p>
 			</div>
 		</div>
+
+		{#if callType === 'video'}
+			<!-- Video Container -->
+			<div class="relative mt-6 aspect-video w-full overflow-hidden rounded-xl bg-black">
+				<!-- Remote Video (Large) -->
+				<video
+					bind:this={remoteVideoElement}
+					autoplay
+					playsinline
+					class="h-full w-full object-cover"
+				></video>
+
+				<!-- Local Video (PIP) -->
+				<div
+					class="absolute bottom-4 right-4 h-24 w-32 overflow-hidden rounded-lg border-2 border-zinc-800 bg-zinc-900 shadow-xl"
+				>
+					<video
+						bind:this={localVideoElement}
+						autoplay
+						playsinline
+						muted
+						class="h-full w-full object-cover"
+					></video>
+				</div>
+			</div>
+		{/if}
 
 		<div class="mt-4 flex items-center gap-6">
 			<button
