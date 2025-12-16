@@ -86,6 +86,7 @@ export interface User {
 	encrypted_private_key?: string;
 	key_backup_iv?: string;
 	key_backup_salt?: string;
+	is_encryption_enabled?: boolean;
 }
 
 export interface PrivacySettings {

@@ -10,7 +10,8 @@
 	const tabs = [
 		{ id: 'general', label: 'General' },
 		{ id: 'privacy', label: 'Privacy' },
-		{ id: 'notifications', label: 'Notifications' }
+		{ id: 'notifications', label: 'Notifications' },
+		{ id: 'security', label: 'Security' }
 	];
 	let activeTab = 'general';
 
@@ -24,14 +25,14 @@
 		gender: ''
 	};
 
-	let privacyData = {
+	let privacyData: any = {
 		default_post_privacy: 'PUBLIC',
 		can_see_my_friends_list: 'FRIENDS',
 		can_send_me_friend_requests: 'EVERYONE',
 		can_tag_me_in_posts: 'FRIENDS'
 	};
 
-	let notificationData = {
+	let notificationData: any = {
 		email_notifications: true,
 		push_notifications: true,
 		notify_on_friend_request: true,
@@ -39,6 +40,10 @@
 		notify_on_like: true,
 		notify_on_tag: true,
 		notify_on_message: true
+	};
+
+	let securityData = {
+		is_encryption_enabled: true
 	};
 
 	let isLoading = false;
@@ -68,6 +73,11 @@
 		if (user.notification_settings) {
 			notificationData = { ...user.notification_settings };
 		}
+
+		// Security settings
+		securityData = {
+			is_encryption_enabled: user.is_encryption_enabled !== false // Default to true if undefined
+		};
 	}
 
 	async function handleGeneralSubmit() {
@@ -128,6 +138,22 @@
 			message = { type: 'success', text: 'Notification preferences saved!' };
 		} catch (e: any) {
 			message = { type: 'error', text: e.message || 'Failed to save preferences.' };
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function handleSecuritySubmit() {
+		isLoading = true;
+		message = { type: '', text: '' };
+		try {
+			const updatedUser = await updateUserProfile({
+				is_encryption_enabled: securityData.is_encryption_enabled
+			});
+			auth.updateUser(updatedUser);
+			message = { type: 'success', text: 'Security settings updated!' };
+		} catch (e: any) {
+			message = { type: 'error', text: e.message || 'Failed to save security settings.' };
 		} finally {
 			isLoading = false;
 		}
@@ -366,6 +392,49 @@
 								class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
 							>
 								{isLoading ? 'Saving...' : 'Save Preferences'}
+							</button>
+						</div>
+					</form>
+				{/if}
+
+				{#if activeTab === 'security'}
+					<form on:submit|preventDefault={handleSecuritySubmit} class="space-y-6">
+						<h2 class="border-b pb-2 text-xl font-semibold text-gray-800">Security Settings</h2>
+
+						<div class="space-y-4">
+							<div class="flex items-center justify-between">
+								<div>
+									<h3 class="font-medium text-gray-900">End-to-End Encryption</h3>
+									<p class="text-sm text-gray-500">
+										Enable or disable encryption for your messages. Disabling this will prevent new
+										messages from being encrypted.
+									</p>
+								</div>
+								<button
+									type="button"
+									on:click={() =>
+										(securityData.is_encryption_enabled = !securityData.is_encryption_enabled)}
+									class="{securityData.is_encryption_enabled
+										? 'bg-green-600'
+										: 'bg-gray-200'} relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+								>
+									<span
+										aria-hidden="true"
+										class="{securityData.is_encryption_enabled
+											? 'translate-x-5'
+											: 'translate-x-0'} pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+									></span>
+								</button>
+							</div>
+						</div>
+
+						<div class="mt-6 flex justify-end">
+							<button
+								type="submit"
+								disabled={isLoading}
+								class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
+							>
+								{isLoading ? 'Saving...' : 'Save Security Settings'}
 							</button>
 						</div>
 					</form>

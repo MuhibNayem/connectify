@@ -20,13 +20,19 @@ Fetches friends and groups to populate the list.
 	let showCreateGroupModal = $state(false);
 	let presenceState = $state<PresenceState>({});
 
-	presenceStore.subscribe((value) => {
-		presenceState = value;
-	});
+	// Managed in onMount
 
 	// Subscribe to WebSocket messages for real-time updates
-	$effect(() => {
-		const unsubscribe = websocketMessages.subscribe((event) => {
+	// WebSocket subscription managed in onMount to avoid dependency cycles
+
+	onMount(() => {
+		// Subscribe to Presence Store
+		const unsubscribePresence = presenceStore.subscribe((value) => {
+			presenceState = value;
+		});
+
+		// Subscribe to WebSocket messages
+		const unsubscribeWS = websocketMessages.subscribe((event) => {
 			if (!event) return;
 
 			switch (event.type) {
@@ -68,21 +74,21 @@ Fetches friends and groups to populate the list.
 					});
 
 					// Re-sort conversations by timestamp
-					conversations = conversations.sort((a, b) => {
-						const timeA = a.last_message_timestamp
-							? new Date(a.last_message_timestamp).getTime()
-							: 0;
-						const timeB = b.last_message_timestamp
-							? new Date(b.last_message_timestamp).getTime()
-							: 0;
-						return timeB - timeA;
-					});
+					if (updated) {
+						conversations = [...conversations].sort((a, b) => {
+							const timeA = a.last_message_timestamp
+								? new Date(a.last_message_timestamp).getTime()
+								: 0;
+							const timeB = b.last_message_timestamp
+								? new Date(b.last_message_timestamp).getTime()
+								: 0;
+							return timeB - timeA;
+						});
+					}
 					break;
 				}
 				case 'CONVERSATION_SEEN_UPDATE': {
-					// Reset unread count for the conversation that was marked as seen
 					const { conversation_id, user_id } = event.data;
-					// Only reset if the current user marked it as seen
 					if (user_id === auth.state.user?.id) {
 						conversations = conversations.map((conv) => {
 							if (conv.id === conversation_id) {
@@ -105,8 +111,6 @@ Fetches friends and groups to populate the list.
 				}
 				case 'GROUP_CREATED': {
 					const newGroup = event.data;
-					// Only add if I am a member (implied by receiving the event usually?)
-					// Check if already exists
 					if (!conversations.some((c) => c.id === newGroup.id)) {
 						const newConversation: ConversationSummary = {
 							id: newGroup.id,
@@ -124,31 +128,36 @@ Fetches friends and groups to populate the list.
 			}
 		});
 
-		return unsubscribe;
-	});
+		// Async Data Fetching
+		(async () => {
+			if (!auth.state.user) {
+				error = 'User not authenticated.';
+				isLoading = false;
+				return;
+			}
 
-	onMount(async () => {
-		if (!auth.state.user) {
-			error = 'User not authenticated.';
-			isLoading = false;
-			return;
-		}
+			try {
+				const fetchedConversations = await getConversationSummaries();
 
-		try {
-			const fetchedConversations = await getConversationSummaries();
-			conversations = fetchedConversations;
+				// Sort conversations by timestamp of last message (newest first)
+				const sorted = fetchedConversations.sort((a, b) => {
+					const timeA = a.last_message_timestamp ? new Date(a.last_message_timestamp).getTime() : 0;
+					const timeB = b.last_message_timestamp ? new Date(b.last_message_timestamp).getTime() : 0;
+					return timeB - timeA;
+				});
+				conversations = sorted;
+			} catch (e: any) {
+				error = e.message || 'Failed to load conversations.';
+			} finally {
+				isLoading = false;
+			}
+		})();
 
-			// Sort conversations by timestamp of last message (newest first)
-			conversations = conversations.sort((a, b) => {
-				const timeA = a.last_message_timestamp ? new Date(a.last_message_timestamp).getTime() : 0;
-				const timeB = b.last_message_timestamp ? new Date(b.last_message_timestamp).getTime() : 0;
-				return timeB - timeA;
-			});
-		} catch (e: any) {
-			error = e.message || 'Failed to load conversations.';
-		} finally {
-			isLoading = false;
-		}
+		// Return cleanup function
+		return () => {
+			unsubscribePresence();
+			unsubscribeWS();
+		};
 	});
 
 	function getConversationUrl(conv: ConversationSummary): string {

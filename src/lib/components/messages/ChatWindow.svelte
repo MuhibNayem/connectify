@@ -11,10 +11,13 @@ It orchestrates the display of messages and the message input field.
 		type ConversationSummary,
 		markConversationAsSeen,
 		updateUserKeys,
+		updateUserProfile,
 		type UserKeys
 	} from '$lib/api';
 	import type { Message as MessageModel } from '$lib/types';
 	import { formatDistanceToNow } from 'date-fns';
+	import { tick, onMount } from 'svelte';
+
 	import Message from '$lib/components/messages/Message.svelte';
 	import Lightbox from '$lib/components/messages/Lightbox.svelte';
 	import MessageInput from './MessageInput.svelte';
@@ -42,7 +45,14 @@ It orchestrates the display of messages and the message input field.
 	let chatContainer: HTMLElement;
 	let isOpponentTyping = $state(false);
 	let typingTimeout: ReturnType<typeof setTimeout>;
-	let isSending = $state(false); // Declare isSending here
+	let isSending = $state(false);
+
+	// Pagination State
+	let page = $state(1);
+	let limit = $state(50);
+	let hasMore = $state(true);
+	let isFetchingMore = $state(false);
+	let initialLoadComplete = $state(false); // To differntiate initial load vs pagination
 
 	let conversationPartner = $state<ConversationSummary | null>(null);
 	let presenceState = $state<PresenceState>({});
@@ -268,27 +278,72 @@ It orchestrates the display of messages and the message input field.
 		isEncrypted = true;
 	}
 
-	// Auto-enable encryption if keys are available
+	// Auto-enable encryption if keys are available, and user hasn't globally disabled it
 	$effect(() => {
-		if (myKeyPair && partnerPublicKey && !isEncrypted && conversationType === 'user') {
-			console.log('[E2EE] Auto-enabling encryption');
+		const globalEncryptionEnabled = auth.state.user?.is_encryption_enabled !== false; // Default to true if undefined
+		if (
+			myKeyPair &&
+			partnerPublicKey &&
+			!isEncrypted &&
+			conversationType === 'user' &&
+			globalEncryptionEnabled
+		) {
+			console.log('[E2EE] Auto-enabling encryption (Global setting enabled)');
 			isEncrypted = true;
 		}
 	});
 
+	// Auto-prompt to restore keys if missing locally but exist on server
+	$effect(() => {
+		// Only run if we are in a user chat (where E2EE matters) logic could be general though.
+		const user = auth.state.user;
+		// If we do NOT have local keys...
+		if (!myKeyPair && !isSettingUpKeys && !isRestoringKeys) {
+			// And we DO have a backup on server...
+			if (user?.encrypted_private_key && user?.key_backup_iv) {
+				// And we haven't already shown it (maybe track with a flag if user dismissed it?)
+				// For now, if messages are failing to decrypt, it helps to show it.
+				// Let's rely on user action or specific conditions.
+				// Showing it immediately on load might be intrusive if they just want to read plain texts.
+				// BUT if they have encrypted messages in the list, they can't see them.
+
+				// Let's check if there are encrypted messages that we can't read?
+				const hasEncryptedMessages = messages.some((m) => m.is_encrypted && !m._is_decrypted);
+				if (hasEncryptedMessages) {
+					// Debounce or ensure we don't spam
+					if (!showRestoreModal && !showRecoverySetup) {
+						// console.log('[E2EE] Prompting restore due to encrypted messages...');
+						// showRestoreModal = true;
+						// Commented out auto-show to avoid annoyance loop. relying on the "Unlock keys" button or banner?
+						// Better: Show a banner in the chat header?
+					}
+				}
+			}
+		}
+	});
+
+	// Helper to decrypt a single message
 	// Helper to decrypt a single message
 	async function decryptMessageContent(msg: any): Promise<string> {
 		if (!msg.is_encrypted || !msg.iv) return msg.content;
-		if (!myKeyPair) return '[Encrypted] (Unlock keys)';
+		if (!myKeyPair) return '[Encrypted] (Unlock keys to read)';
 		if (!partnerPublicKey) return '[Encrypted] (Missing partner key)';
 
 		try {
+			// Check if message mentions a specific key fingerprint?
+			// Current protocol doesn't attach key ID to message, so we assume current key.
+			// If decryption fails, it's likely a key mismatch (old message vs new key).
+
 			const sharedKey = await crypto.deriveSharedSecret(myKeyPair.privateKey, partnerPublicKey);
 			const decrypted = await crypto.decryptMessage(msg.content, msg.iv, sharedKey);
+
+			if (decrypted.startsWith('[Decryption Error]')) {
+				return '[Encrypted] (Key mismatch - Old message?)';
+			}
 			return decrypted;
 		} catch (e) {
 			console.error('Decryption failed:', e);
-			return '[Decryption Error]';
+			return '[Encrypted] (Decryption failed)';
 		}
 	}
 
@@ -326,55 +381,70 @@ It orchestrates the display of messages and the message input field.
 				isDecrypting = true;
 
 				try {
-					// Optimization: Derive shared key ONCE for the whole batch
-					// This avoids repetitive ECDH calculations (expensive).
-					const sharedKey = await crypto.deriveSharedSecret(
-						myKeyPair!.privateKey,
-						partnerPublicKey!
-					);
+					// Loop to process all pending decryption tasks, handling incoming updates (like pagination)
+					// efficiently without race conditions.
+					while (true) {
+						// Check for work using the latest 'messages' state
+						const hasWork = messages.some(
+							(msg) => msg.is_encrypted && !msg._is_decrypted && !decryptedCache.has(msg.id)
+						);
 
-					// Identify messages needing decryption and prepare jobs
-					const jobs: Promise<{ index: number; content: string }>[] = [];
+						if (!hasWork) break;
 
-					for (let i = 0; i < messages.length; i++) {
-						const msg = messages[i];
-						if (msg.is_encrypted && !msg._is_decrypted && !decryptedCache.has(msg.id)) {
-							decryptedCache.add(msg.id);
-							// Push promise to array for parallel processing
-							jobs.push(
-								crypto
-									.decryptMessage(msg.content, msg.iv, sharedKey)
-									.then((plaintext) => ({ index: i, content: plaintext }))
-									.catch((e) => {
-										console.error('[E2EE] Decryption failed for msg', msg.id, e);
-										return { index: i, content: '[Decryption Error]' };
-									})
-							);
-						}
-					}
+						// Optimization: Derive shared key ONCE for the whole batch
+						// We assume key doesn't change mid-loop, or if it does, effect re-trigger is blocked anyway,
+						// but using current keys for current batch is correct.
+						const sharedKey = await crypto.deriveSharedSecret(
+							myKeyPair!.privateKey,
+							partnerPublicKey!
+						);
 
-					if (jobs.length > 0) {
-						// Wait for all to finish (Parallel execution)
-						const results = await Promise.all(jobs);
+						// Identify messages needing decryption and prepare jobs
+						const jobs: Promise<{ id: string; content: string }>[] = [];
 
-						// Apply updates in a batch (Synchronous loop updates are usually batched by Svelte)
-						results.forEach((res) => {
-							const msg = messages[res.index];
-							// Verify ID hasn't shifted (rare race condition but safe to check?
-							// Actually index might be risky if list changed during await,
-							// but the lock 'isDecrypting' usually prevents list reload unless converastion changed.
-							// And if conversation changed, messages array is new, so indices are wrong.
-							// But 'isDecrypting' reset on conversation change helps.
-							// Ideally we match by ID, but that's O(N*M).
-							// Given the lock, indices should be stable enough for this optimization level.)
-
-							// Double check ID match just to be safe
-							if (msg) {
-								messages[res.index] = { ...msg, content: res.content, _is_decrypted: true };
+						for (let i = 0; i < messages.length; i++) {
+							const msg = messages[i];
+							if (msg.is_encrypted && !msg._is_decrypted && !decryptedCache.has(msg.id)) {
+								decryptedCache.add(msg.id);
+								jobs.push(
+									crypto
+										.decryptMessage(msg.content, msg.iv, sharedKey)
+										.then((plaintext) => {
+											if (plaintext.startsWith('[Decryption Error]')) {
+												return { id: msg.id, content: '[Encrypted] (Key mismatch)' };
+											}
+											return { id: msg.id, content: plaintext };
+										})
+										.catch((e) => {
+											console.error('[E2EE] Decryption failed for msg', msg.id, e);
+											return { id: msg.id, content: '[Encrypted] (Decryption Error)' };
+										})
+								);
 							}
-						});
+						}
 
-						console.log('[E2EE] Batch Decrypted:', results.length);
+						if (jobs.length > 0) {
+							// Wait for all to finish (Parallel execution)
+							const results = await Promise.all(jobs);
+
+							// Apply updates in a batch
+							const updatedMessages = [...messages];
+							let hasUpdates = false;
+
+							results.forEach((res) => {
+								const index = updatedMessages.findIndex((m) => m.id === res.id);
+								if (index !== -1) {
+									const msg = updatedMessages[index];
+									updatedMessages[index] = { ...msg, content: res.content, _is_decrypted: true };
+									hasUpdates = true;
+								}
+							});
+
+							if (hasUpdates) {
+								messages = updatedMessages;
+								console.log('[E2EE] Batch Decrypted:', results.length);
+							}
+						}
 					}
 				} finally {
 					isDecrypting = false;
@@ -412,7 +482,12 @@ It orchestrates the display of messages and the message input field.
 
 	$effect(() => {
 		if (conversationId) {
-			loadMessages();
+			// Reset pagination state on conversation change
+			page = 1;
+			hasMore = true;
+			messages = [];
+			initialLoadComplete = false;
+			fetchMessages(1);
 			loadConversationPartner();
 		}
 	});
@@ -430,14 +505,27 @@ It orchestrates the display of messages and the message input field.
 			if (type === 'user') {
 				const { getUserByID } = await import('$lib/api'); // Dynamic import to avoid circular dependency if any
 				const user = await getUserByID(id);
+
+				// Only enable encryption if the user has keys AND has explicitly enabled it
+				// If is_encryption_enabled is undefined, we assume true if keys exist (legacy compatibility)
+				// or false? Let's assume true if keys exist but safe check if explicitly false.
+				const isEnabled = user.is_encryption_enabled !== false;
+
 				if (user.public_key) {
+					// Always load key for decryption
 					partnerPublicKey = await crypto.importPublicKey(user.public_key);
 					partnerFingerprint = await crypto.computeFingerprint(user.public_key);
 					console.log('Partner Public Key loaded.');
+
+					// Check preference for SENDING
+					if (!isEnabled && isEncrypted) {
+						isEncrypted = false;
+						console.log('Encryption disabled by partner preference');
+					}
 				} else {
 					partnerPublicKey = null;
-					// If partner has no key, disable encryption
 					if (isEncrypted) isEncrypted = false;
+					console.log('Partner has no public key');
 				}
 			}
 		} catch (e) {
@@ -445,12 +533,20 @@ It orchestrates the display of messages and the message input field.
 		}
 	}
 
-	async function loadMessages() {
-		isLoading = true;
-		error = null;
+	async function fetchMessages(pageNum: number) {
+		if (pageNum === 1) {
+			isLoading = true;
+			error = null;
+		} else {
+			isFetchingMore = true;
+		}
+
 		try {
 			const [type, id] = conversationId.split('-');
-			let params: { receiverID?: string; groupID?: string } = {};
+			let params: { receiverID?: string; groupID?: string; page: number; limit: number } = {
+				page: pageNum,
+				limit: limit
+			};
 
 			if (type === 'group') {
 				params.groupID = id;
@@ -463,20 +559,70 @@ It orchestrates the display of messages and the message input field.
 			const response = await getMessages(params);
 			if (response && Array.isArray(response.messages)) {
 				// Ensure seen_by and delivered_to are always arrays
-				messages = response.messages
+				const newMessages = response.messages
 					.map((msg: any) => ({
 						...msg,
 						seen_by: msg.seen_by || [],
 						delivered_to: msg.delivered_to || []
 					}))
-					.reverse();
+					.reverse(); // API returns newest first (desc), we reverse for chronological display
+
+				if (newMessages.length < limit) {
+					hasMore = false;
+				}
+
+				if (pageNum === 1) {
+					messages = newMessages;
+					initialLoadComplete = true;
+					// Scroll to bottom on initial load
+					tick().then(() => {
+						if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+					});
+				} else {
+					// Prepend older messages
+					// distinct messages only to prevent key (id) collisions
+					const existingIds = new Set(messages.map((m) => m.id));
+					const uniqueNewMessages = newMessages.filter((m) => !existingIds.has(m.id));
+
+					if (uniqueNewMessages.length > 0) {
+						const previousScrollHeight = chatContainer.scrollHeight;
+						messages = [...uniqueNewMessages, ...messages];
+
+						// Maintain scroll position
+						tick().then(() => {
+							if (chatContainer) {
+								const newScrollHeight = chatContainer.scrollHeight;
+								chatContainer.scrollTop = newScrollHeight - previousScrollHeight;
+							}
+						});
+					}
+				}
 			} else {
-				messages = [];
+				if (pageNum === 1) messages = [];
+				hasMore = false;
 			}
 		} catch (e: any) {
+			console.error('Failed to load messages:', e);
 			error = e.message || 'Failed to load messages.';
 		} finally {
-			isLoading = false;
+			if (pageNum === 1) {
+				isLoading = false;
+			} else {
+				isFetchingMore = false;
+			}
+		}
+	}
+
+	function handleScroll() {
+		if (!chatContainer) return;
+
+		const { scrollTop } = chatContainer;
+
+		// If scrolled to top (approx < 50px) and we have more messages and aren't currently fetching
+		if (scrollTop < 50 && hasMore && !isFetchingMore && !isLoading && initialLoadComplete) {
+			console.log('Load more messages triggering...');
+			page += 1;
+			fetchMessages(page);
 		}
 	}
 
@@ -633,14 +779,67 @@ It orchestrates the display of messages and the message input field.
 	}
 
 	// Scroll to the bottom of the chat container when messages change
+	// Scroll to the bottom of the chat container when messages change ONLY if we are near the bottom or it's a new message sent by us
+	// For pagination updates (prepending), we handle scroll in fetchMessages manually.
 	$effect(() => {
-		if (chatContainer && messages) {
-			chatContainer.scrollTop = chatContainer.scrollHeight;
+		if (chatContainer && messages && !isFetchingMore && initialLoadComplete) {
+			// Basic auto-scroll logic for new incoming messages:
+			// If we are at the bottom, stay at bottom.
+			// If we sent the message (isSending or last message is ours), scroll to bottom.
+			// implementation left simple here as requested for pagination task mainly.
+			// Actually, the original code had:
+			// chatContainer.scrollTop = chatContainer.scrollHeight;
+			// We should preserve this behavior for new messages but NOT for pagination prepends.
+			// The check '!isFetchingMore' partly handles this, but 'messages' dependency triggers on ANY change.
+			// Let's refine: creating a snapshot before update is hard in $effect.
+			// Instead, let's rely on fetchMessages handling the scroll for pagination, and this effect handling NEW messages (append).
+			// Problem: $effect triggers on ALL message changes.
+			// We only want to auto-scroll to bottom if:
+			// 1. It's the initial load (handled in fetchMessages) -> Actually fetchMessages handles it now.
+			// 2. A new message arrived (appended)
+			// If we just prepended messages, isFetchingMore was true during the fetch.
+			// utilize the tick() inside fetchMessages for prepending scroll fix.
+			// prevent this effect from overriding the scroll fix when isFetchingMore was just true?
+			// Svelte 5 effects track dependencies finely.
+			// Simplest approach: Use a flag or check if last message changed?
+			// For now, let's just disabling this rigorous auto-scroll for every message change
+			// can avoid jumping to bottom when loading old history.
+			// The simple rule: only auto-scroll if we are ALREADY at the bottom, OR if it's a fresh load (page 1).
 		}
 	});
 
-	// Handle real-time updates from WebSocket
+	// We can rely on a simpler mechanic:
+	// If a new message is added (length increased) and it's at the END, scroll to bottom.
+	// If length increased but at START (pagination), maintain position.
+
+	let lastMessageCount = 0;
 	$effect(() => {
+		if (messages.length > lastMessageCount) {
+			const isPrepended = messages.length - lastMessageCount === limit; // rough heuristic or check IDs?
+			// Check if the FIRST message ID changed vs LAST message ID changed?
+			// Actually, `fetchMessages` handles the scroll for PREPENDING.
+			// So we just need to handle the APPENDING case here (incoming websocket or sent message).
+
+			// If we are not fetching more, assume it's an append.
+			if (!isFetchingMore && initialLoadComplete) {
+				// Check if user is near bottom or if it's their own message
+				if (chatContainer) {
+					const { scrollTop, scrollHeight, clientHeight } = chatContainer;
+					const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+					const lastMsg = messages[messages.length - 1];
+					const isMyMessage = lastMsg?.sender_id === auth.state.user?.id;
+
+					if (isNearBottom || isMyMessage) {
+						chatContainer.scrollTop = chatContainer.scrollHeight;
+					}
+				}
+			}
+		}
+		lastMessageCount = messages.length;
+	});
+
+	// Handle real-time updates from WebSocket
+	onMount(() => {
 		const unsubscribe = websocketMessages.subscribe((event) => {
 			if (!event) return;
 			console.log(
@@ -1023,8 +1222,28 @@ It orchestrates the display of messages and the message input field.
 		/>
 	{/if}
 
+	<!-- E2EE Restore Banner -->
+	{#if !myKeyPair && auth.state.user?.encrypted_private_key && conversationType === 'user'}
+		<div class="bg-blue-50 p-2 text-center text-sm text-blue-700">
+			You have an encrypted backup.
+			<button class="font-bold underline" onclick={() => (showRestoreModal = true)}>
+				Restore Keys
+			</button>
+			to read secure messages.
+		</div>
+	{/if}
+
 	<!-- Message Display Area -->
-	<div bind:this={chatContainer} class="flex-1 overflow-y-auto bg-gray-50 p-4">
+	<div
+		bind:this={chatContainer}
+		class="flex-1 overflow-y-auto bg-gray-50 p-4"
+		onscroll={handleScroll}
+	>
+		{#if isFetchingMore}
+			<div class="flex justify-center p-2">
+				<span class="text-xs text-gray-400">Loading older messages...</span>
+			</div>
+		{/if}
 		{#if isLoading}
 			<p>Loading messages...</p>
 		{:else if error}
@@ -1036,7 +1255,9 @@ It orchestrates the display of messages and the message input field.
 						{message}
 						on:rendered={handleMessageRendered}
 						on:deleted={handleMessageDeleted}
+						{conversationId}
 					/>
+					<!-- We can pass conversationId or callbacks to Message if needed for specific actions -->
 				</div>
 			{/each}
 
@@ -1208,15 +1429,43 @@ It orchestrates the display of messages and the message input field.
 
 				<div class="flex justify-between border-t pt-4">
 					<div class="flex gap-2">
-						<button
-							class="text-red-500 hover:text-red-700"
-							onclick={() => {
-								isEncrypted = false;
-								showSecurityInfo = false;
-							}}
-						>
-							Disable Encryption
-						</button>
+						{#if auth.state.user?.is_encryption_enabled !== false}
+							<button
+								class="text-red-500 hover:text-red-700"
+								onclick={async () => {
+									try {
+										const updatedUser = await updateUserProfile({
+											is_encryption_enabled: false
+										});
+										auth.updateUser(updatedUser);
+										isEncrypted = false;
+										showSecurityInfo = false;
+									} catch (e) {
+										console.error('Failed to disable encryption:', e);
+									}
+								}}
+							>
+								Disable Encryption (Permanently)
+							</button>
+						{:else}
+							<button
+								class="text-green-600 hover:text-green-800"
+								onclick={async () => {
+									try {
+										const updatedUser = await updateUserProfile({
+											is_encryption_enabled: true
+										});
+										auth.updateUser(updatedUser);
+										// It will auto-enable via the effect
+										showSecurityInfo = false;
+									} catch (e) {
+										console.error('Failed to enable encryption:', e);
+									}
+								}}
+							>
+								Enable Encryption
+							</button>
+						{/if}
 						<button
 							class="text-orange-500 hover:text-orange-700"
 							onclick={() => {
