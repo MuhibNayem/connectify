@@ -8,6 +8,7 @@
 	export let placeholder: string = 'Select...';
 	export let disabled: boolean = false;
 	export let style: string = '';
+	export let triggerClass: string = '';
 
 	let isOpen = false;
 
@@ -32,7 +33,7 @@
 <div class="relative inline-block text-left {style}" use:clickOutside={close}>
 	<button
 		type="button"
-		class="glass-input text-foreground focus:ring-primary inline-flex w-full items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm font-medium shadow-sm hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+		class="glass-input text-foreground focus:ring-primary inline-flex w-full items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm font-medium shadow-sm hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {triggerClass}"
 		onclick={toggle}
 		{disabled}
 		aria-haspopup="listbox"
@@ -54,7 +55,7 @@
 
 	{#if isOpen}
 		<div
-			class="glass-card absolute right-0 z-[99999999999999] mt-2 w-full origin-top-right overflow-hidden rounded-md border border-white/10 outline-none"
+			class="bg-popover absolute right-0 z-[99999999999999] mt-2 w-full origin-top-right overflow-hidden rounded-md border border-white/10 shadow-xl outline-none"
 			transition:slide={{ duration: 150 }}
 			role="listbox"
 			tabindex="-1"

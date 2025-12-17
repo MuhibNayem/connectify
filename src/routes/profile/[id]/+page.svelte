@@ -3,10 +3,11 @@
 	import { apiRequest, uploadFiles, updateUserProfile } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
-	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
+	import PostCreator from '$lib/components/feed/PostCreator.svelte';
+	import { Camera, MapPin, Link as LinkIcon, Calendar, MoreHorizontal } from '@lucide/svelte';
 
 	let userId = $state('');
 	let user = $state<any | null>(null);
@@ -18,6 +19,9 @@
 	let friendshipStatus = $state<'none' | 'pending' | 'friends' | 'blocked'>('none');
 	let sendingRequest = $state(false);
 	let isCurrentUser = $state(false);
+	let activeTab = $state('posts');
+	let friends = $state<any[]>([]);
+	let loadingFriends = $state(false);
 
 	// File Inputs
 	let avatarInput: HTMLInputElement;
@@ -42,6 +46,8 @@
 			isCurrentUser = auth.state.user?.id === userId;
 			fetchUserProfile(userId);
 			fetchUserPosts(userId);
+			fetchUserFriends(userId);
+			activeTab = 'posts'; // Reset tab on navigation
 		}
 	});
 
@@ -87,7 +93,7 @@
 			user = await apiRequest('GET', `/users/${id}`);
 
 			// Friendship check only if not current user
-			if (!isCurrentUser && auth.state.isAuthenticated) {
+			if (!isCurrentUser && auth.state.user) {
 				try {
 					const friendshipCheck = await apiRequest('GET', `/friendships/check?other_user_id=${id}`);
 					if (friendshipCheck.are_friends) {
@@ -124,34 +130,83 @@
 			loadingPosts = false;
 		}
 	}
+
+	async function fetchUserFriends(id: string) {
+		loadingFriends = true;
+		try {
+			// Fetch accepted friendships for this user
+			const response = await apiRequest('GET', `/friendships?user_id=${id}&status=accepted`);
+			const acceptedFriendships: any[] = response.data;
+
+			if (!acceptedFriendships) {
+				friends = [];
+				return;
+			}
+
+			// Fetch details for each friend
+			const friendUserPromises = acceptedFriendships.map(async (friendship) => {
+				const friendId =
+					friendship.requester_id === id ? friendship.receiver_id : friendship.requester_id;
+
+				try {
+					const friendDetails = await apiRequest('GET', `/users/${friendId}`);
+					return {
+						id: friendDetails.id,
+						username: friendDetails.username,
+						avatar: friendDetails.avatar,
+						full_name: friendDetails.full_name
+					};
+				} catch (e) {
+					return null;
+				}
+			});
+
+			const results = await Promise.all(friendUserPromises);
+			friends = results.filter((f) => f !== null);
+		} catch (err) {
+			console.error('Failed to fetch friends', err);
+		} finally {
+			loadingFriends = false;
+		}
+	}
+
+	function handlePostCreated(event: CustomEvent) {
+		posts = [event.detail, ...posts];
+	}
 </script>
 
-<div class="container mx-auto p-4">
-	{#if loadingUser}
-		<p>Loading user profile...</p>
-	{:else if userError}
+{#if loadingUser}
+	<div class="flex h-[50vh] items-center justify-center">
+		<div
+			class="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+		></div>
+	</div>
+{:else if userError}
+	<div class="container mx-auto p-4 text-center">
 		<p class="text-red-500">Error: {userError}</p>
-	{:else if user}
-		<Card class="mb-6 overflow-hidden">
-			<!-- Cover Picture Region -->
-			<div class="group relative h-48 w-full bg-gray-200 md:h-64">
+		<Button href="/" variant="link">Go Home</Button>
+	</div>
+{:else if user}
+	<div class="bg-card pb-4 shadow-sm">
+		<div class="mx-auto max-w-[1095px]">
+			<!-- Cover Photo -->
+			<div class="relative h-[350px] w-full overflow-hidden rounded-b-xl bg-gray-200 md:h-[400px]">
 				{#if user.cover_picture}
 					<img src={user.cover_picture} alt="Cover" class="h-full w-full object-cover" />
 				{:else}
 					<div
 						class="flex h-full w-full items-center justify-center bg-gradient-to-r from-gray-100 to-gray-200 text-gray-400"
-					>
-						No Cover Photo
-					</div>
+					></div>
 				{/if}
 
 				{#if isCurrentUser}
 					<button
-						class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/40 font-medium text-white opacity-0 transition group-hover:opacity-100"
+						class="absolute bottom-4 right-4 flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-black shadow-sm hover:bg-gray-100"
 						onclick={() => coverInput.click()}
 						disabled={isUploading}
 					>
-						Change Cover
+						<Camera size={18} />
+						<span>Edit cover photo</span>
 					</button>
 					<input
 						type="file"
@@ -163,110 +218,324 @@
 				{/if}
 			</div>
 
-			<CardContent class="relative flex flex-col items-center p-6 pt-0 md:flex-row md:pt-0">
-				<!-- Avatar with overlap -->
-				<div class="group relative -mt-16 mb-4 flex-shrink-0 md:mb-0 md:mr-6">
-					<Avatar class="h-32 w-32 border-4 border-white bg-white shadow-lg md:h-40 md:w-40">
-						<AvatarImage
-							src={user.avatar || 'https://github.com/shadcn.png'}
-							alt={user.username}
-							class="object-cover"
-						/>
-						<AvatarFallback class="text-4xl"
-							>{user.username?.charAt(0).toUpperCase()}</AvatarFallback
-						>
-					</Avatar>
-
-					{#if isCurrentUser}
-						<button
-							class="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-black/40 text-sm font-medium text-white opacity-0 transition group-hover:opacity-100"
-							onclick={() => avatarInput.click()}
-							disabled={isUploading}
-						>
-							Edit
-						</button>
-						<input
-							type="file"
-							accept="image/*"
-							bind:this={avatarInput}
-							onchange={(e) => handleFileChange('avatar', e)}
-							hidden
-						/>
-					{/if}
-				</div>
-
-				<div class="mt-4 flex-grow text-center md:mt-6 md:text-left">
-					<div class="flex flex-col justify-between md:flex-row md:items-center">
-						<div>
-							<h1 class="text-3xl font-bold">{user.full_name || user.username}</h1>
-							{#if user.full_name}<p class="text-lg text-gray-600">@{user.username}</p>{/if}
+			<!-- Profile Info Header -->
+			<div class="mx-auto max-w-[1030px] px-4 pb-4">
+				<div class="relative flex flex-col items-center md:flex-row md:items-end md:gap-6">
+					<!-- Avatar -->
+					<div class="relative -mt-20 md:-mt-8">
+						<div class="bg-card relative rounded-full p-1">
+							<Avatar class="border-card h-[168px] w-[168px] border-4 bg-white object-cover">
+								<AvatarImage
+									src={user.avatar || 'https://github.com/shadcn.png'}
+									alt={user.username}
+									class="object-cover"
+								/>
+								<AvatarFallback class="text-6xl"
+									>{user.username?.charAt(0).toUpperCase()}</AvatarFallback
+								>
+							</Avatar>
+							{#if isCurrentUser}
+								<button
+									class="border-card absolute bottom-2 right-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 bg-gray-200 text-black hover:bg-gray-300"
+									onclick={() => avatarInput.click()}
+									disabled={isUploading}
+								>
+									<Camera size={20} />
+								</button>
+								<input
+									type="file"
+									accept="image/*"
+									bind:this={avatarInput}
+									onchange={(e) => handleFileChange('avatar', e)}
+									hidden
+								/>
+							{/if}
 						</div>
-						{#if isCurrentUser}
-							<a
-								href="/settings"
-								class="mt-2 rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-200 md:mt-0"
-							>
-								Edit Profile
-							</a>
+					</div>
+
+					<!-- Info -->
+					<div class="mb-4 mt-2 flex-grow text-center md:mb-8 md:mt-0 md:text-left">
+						<h1 class="text-3xl font-bold">{user.full_name || user.username}</h1>
+						{#if user.full_name}<p class="text-muted-foreground font-semibold">
+								@{user.username}
+							</p>{/if}
+						{#if user.bio}
+							<p class="text-muted-foreground mx-auto mt-1 max-w-md md:mx-0">{user.bio}</p>
+						{/if}
+
+						{#if friendshipStatus === 'friends'}
+							<p class="text-muted-foreground mt-1 text-sm font-semibold">
+								{friends.length} friends
+							</p>
 						{/if}
 					</div>
 
-					{#if user.bio}<p class="mt-2 max-w-2xl text-gray-700">{user.bio}</p>{/if}
-
-					<div class="mt-4 flex flex-wrap gap-4 text-sm text-gray-500">
-						{#if user.location}<span>📍 {user.location}</span>{/if}
-						{#if user.website}<span>🔗 {user.website}</span>{/if}
-						<span>📅 Joined {new Date(user.created_at).toLocaleDateString()}</span>
-					</div>
-
-					<div class="mt-6 flex justify-center space-x-4 md:justify-start">
+					<!-- Actions -->
+					<div class="mb-8 flex flex-col gap-2 md:flex-row">
 						{#if !isCurrentUser}
 							{#if friendshipStatus === 'none'}
-								<Button variant="outline" onclick={sendFriendRequest} disabled={sendingRequest}>
+								<Button onclick={sendFriendRequest} disabled={sendingRequest}>
 									{sendingRequest ? 'Sending...' : 'Add Friend'}
 								</Button>
 							{:else if friendshipStatus === 'pending'}
-								<Button variant="outline" disabled>Friend Request Sent</Button>
+								<Button variant="secondary" disabled>Request Sent</Button>
 							{:else if friendshipStatus === 'friends'}
-								<Button variant="outline" disabled>Friends</Button>
+								<Button variant="secondary">Friends</Button>
 							{:else if friendshipStatus === 'blocked'}
 								<Button variant="destructive" disabled>Blocked</Button>
 							{/if}
-							<Button>Message</Button>
+							<Button variant="secondary">Message</Button>
+						{:else}
+							<Button variant="secondary" class="bg-secondary/50 font-semibold" href="/settings">
+								<div class="mr-2">✏️</div>
+								Edit profile
+							</Button>
 						{/if}
 					</div>
 				</div>
-			</CardContent>
-		</Card>
 
-		<Tabs value="posts" class="w-full">
-			<TabsList class="grid w-full grid-cols-2">
-				<TabsTrigger value="posts">Posts</TabsTrigger>
-				<TabsTrigger value="friends">Friends</TabsTrigger>
-			</TabsList>
-			<TabsContent value="posts" class="mt-4">
-				<h2 class="mb-4 text-2xl font-bold">Posts by {user.username}</h2>
-				{#if loadingPosts}
-					<p>Loading posts...</p>
-				{:else if postsError}
-					<p class="text-red-500">Error: {postsError}</p>
-				{:else if posts.length === 0}
-					<p>No posts found for {user.username}.</p>
+				<hr class="border-border/40 my-1" />
+
+				<!-- Navigation Tabs -->
+				<div class="flex items-center gap-1 overflow-x-auto py-1">
+					<Button
+						variant="ghost"
+						class={`hover:bg-secondary/50 h-12 rounded-lg px-4 font-semibold ${activeTab === 'posts' ? 'text-primary border-primary rounded-none border-b-2' : 'text-muted-foreground'}`}
+						onclick={() => (activeTab = 'posts')}
+					>
+						Posts
+					</Button>
+					<Button
+						variant="ghost"
+						class={`hover:bg-secondary/50 h-12 rounded-lg px-4 font-semibold ${activeTab === 'about' ? 'text-primary border-primary rounded-none border-b-2' : 'text-muted-foreground'}`}
+						onclick={() => (activeTab = 'about')}
+					>
+						About
+					</Button>
+					<Button
+						variant="ghost"
+						class={`hover:bg-secondary/50 h-12 rounded-lg px-4 font-semibold ${activeTab === 'friends' ? 'text-primary border-primary rounded-none border-b-2' : 'text-muted-foreground'}`}
+						onclick={() => (activeTab = 'friends')}
+					>
+						Friends
+					</Button>
+					<Button
+						variant="ghost"
+						class={`hover:bg-secondary/50 h-12 rounded-lg px-4 font-semibold ${activeTab === 'photos' ? 'text-primary border-primary rounded-none border-b-2' : 'text-muted-foreground'}`}
+						onclick={() => (activeTab = 'photos')}
+					>
+						Photos
+					</Button>
+					<Button
+						variant="ghost"
+						class="text-muted-foreground hover:bg-secondary/50 flex h-12 items-center gap-1 rounded-lg px-4 font-semibold"
+					>
+						More <MoreHorizontal size={16} />
+					</Button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Main Content -->
+	<div class="mx-auto max-w-[1095px] px-4 py-4">
+		{#if activeTab === 'posts'}
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+				<!-- Left Sidebar (Intro, Photos, Friends) -->
+				<div class="space-y-4 md:col-span-5">
+					<!-- Intro Card -->
+					<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+						<h2 class="mb-4 text-xl font-bold">Intro</h2>
+						{#if user.bio}
+							<div class="mb-4 text-center">
+								<p class="text-sm">{user.bio}</p>
+							</div>
+						{/if}
+						<div class="mb-4 space-y-3">
+							{#if user.location}
+								<div class="text-muted-foreground flex items-center gap-2">
+									<MapPin size={20} />
+									<span
+										>Lives in <span class="text-foreground font-semibold">{user.location}</span
+										></span
+									>
+								</div>
+							{/if}
+							{#if user.website}
+								<div class="text-muted-foreground flex items-center gap-2">
+									<LinkIcon size={20} />
+									<a
+										href={user.website}
+										target="_blank"
+										class="truncate text-blue-500 hover:underline">{user.website}</a
+									>
+								</div>
+							{/if}
+							<div class="text-muted-foreground flex items-center gap-2">
+								<Calendar size={20} />
+								<span>Joined {new Date(user.created_at).toLocaleDateString()}</span>
+							</div>
+						</div>
+
+						<Button variant="secondary" class="bg-secondary/50 mb-3 w-full font-semibold"
+							>Edit details</Button
+						>
+					</div>
+
+					<!-- Photos Widget (Mock) -->
+					<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+						<div class="mb-2 flex items-center justify-between">
+							<h2 class="text-xl font-bold">Photos</h2>
+							<Button variant="link" class="text-primary p-0" onclick={() => (activeTab = 'photos')}
+								>See all photos</Button
+							>
+						</div>
+						<div class="grid grid-cols-3 gap-1 overflow-hidden rounded-lg">
+							<!-- Mock Photos -->
+							<div class="bg-secondary aspect-square rounded-sm"></div>
+							<div class="bg-secondary aspect-square rounded-sm"></div>
+							<div class="bg-secondary aspect-square rounded-sm"></div>
+						</div>
+					</div>
+
+					<!-- Friends Widget -->
+					<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+						<div class="mb-2 flex items-center justify-between">
+							<h2 class="text-xl font-bold">Friends</h2>
+							<Button
+								variant="link"
+								class="text-primary p-0"
+								onclick={() => (activeTab = 'friends')}>See all friends</Button
+							>
+						</div>
+						<div class="text-muted-foreground mb-1 text-sm">{friends.length} friends</div>
+						<div class="grid grid-cols-3 gap-2">
+							{#each friends.slice(0, 9) as friend}
+								<a href="/profile/{friend.id}" class="group">
+									<div class="bg-secondary mb-1 aspect-square overflow-hidden rounded-lg">
+										{#if friend.avatar}
+											<img
+												src={friend.avatar}
+												alt={friend.username}
+												class="h-full w-full object-cover transition group-hover:scale-105"
+											/>
+										{:else}
+											<div class="flex h-full w-full items-center justify-center text-xs">👤</div>
+										{/if}
+									</div>
+									<div class="truncate text-[11px] font-semibold group-hover:underline">
+										{friend.full_name || friend.username}
+									</div>
+								</a>
+							{/each}
+							{#if friends.length === 0 && !loadingFriends}
+								<div class="text-muted-foreground col-span-3 py-4 text-center text-xs">
+									No friends found
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+
+				<!-- Right Feed -->
+				<div class="space-y-4 md:col-span-7">
+					{#if isCurrentUser}
+						<div class="mb-4">
+							<PostCreator on:postCreated={handlePostCreated} communityId="" />
+						</div>
+					{/if}
+
+					<!-- Filters Widget -->
+					<div
+						class="glass-card bg-card flex items-center justify-between rounded-xl border border-white/5 p-4 shadow-sm"
+					>
+						<h3 class="text-lg font-bold">Posts</h3>
+						<div class="flex gap-2">
+							<Button variant="secondary" size="sm" class="bg-secondary/50"
+								><div class="mr-1">⚙️</div>
+								Filters</Button
+							>
+							<Button variant="secondary" size="sm" class="bg-secondary/50"
+								><div class="mr-1">⚙️</div>
+								Manage posts</Button
+							>
+						</div>
+					</div>
+
+					{#if loadingPosts}
+						<div class="space-y-4">
+							<!-- Skeleton Loaders -->
+							<div class="bg-card h-40 animate-pulse rounded-xl"></div>
+							<div class="bg-card h-40 animate-pulse rounded-xl"></div>
+						</div>
+					{:else if postsError}
+						<p class="text-red-500">Error: {postsError}</p>
+					{:else if posts.length === 0}
+						<div
+							class="glass-card bg-card rounded-xl border border-white/5 p-8 text-center shadow-sm"
+						>
+							<h3 class="mb-2 text-xl font-bold">No posts available</h3>
+							<p class="text-muted-foreground">This user hasn't posted anything yet.</p>
+						</div>
+					{:else}
+						<div class="space-y-4">
+							{#each posts as post (post.id)}
+								<PostCard {post} />
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+		{:else if activeTab === 'friends'}
+			<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+				<h2 class="mb-4 text-2xl font-bold">Friends</h2>
+
+				{#if loadingFriends}
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+						{#each Array(6) as _}
+							<div class="bg-secondary/50 h-24 animate-pulse rounded-xl"></div>
+						{/each}
+					</div>
+				{:else if friends.length === 0}
+					<div class="text-muted-foreground p-8 text-center">No friends found.</div>
 				{:else}
-					<div class="space-y-4">
-						{#each posts as post (post.id)}
-							<PostCard {post} />
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						{#each friends as friend}
+							<div
+								class="bg-secondary/10 hover:bg-secondary/20 flex items-center justify-between rounded-xl border border-white/5 p-4 transition"
+							>
+								<a href="/profile/{friend.id}" class="flex items-center gap-3">
+									<div class="bg-secondary h-20 w-20 overflow-hidden rounded-lg">
+										{#if friend.avatar}
+											<img
+												src={friend.avatar}
+												alt={friend.username}
+												class="h-full w-full object-cover"
+											/>
+										{:else}
+											<div class="flex h-full w-full items-center justify-center">👤</div>
+										{/if}
+									</div>
+									<div>
+										<h3 class="text-lg font-bold hover:underline">
+											{friend.full_name || friend.username}
+										</h3>
+										<p class="text-muted-foreground text-sm">@{friend.username}</p>
+									</div>
+								</a>
+								<Button variant="secondary">Friend</Button>
+							</div>
 						{/each}
 					</div>
 				{/if}
-			</TabsContent>
-			<TabsContent value="friends" class="mt-4">
-				<h2 class="mb-4 text-2xl font-bold">Friends of {user.username}</h2>
-				<p>Friends list coming soon...</p>
-				<!-- You would fetch and display friends here -->
-			</TabsContent>
-		</Tabs>
-	{:else}
-		<p>User not found.</p>
-	{/if}
-</div>
+			</div>
+		{:else}
+			<div class="glass-card bg-card rounded-xl border border-white/5 p-8 text-center shadow-sm">
+				<h2 class="mb-2 text-2xl font-bold capitalize">{activeTab}</h2>
+				<p class="text-muted-foreground">This section is coming soon.</p>
+			</div>
+		{/if}
+	</div>
+{:else}
+	<p>User not found.</p>
+{/if}

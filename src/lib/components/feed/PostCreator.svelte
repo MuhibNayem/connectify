@@ -303,7 +303,7 @@
 			</div>
 
 			<!-- User Info -->
-			<div class="mb-4 flex items-center gap-3">
+			<div class="mb-2 flex items-center gap-3">
 				{#if auth.state.user?.avatar}
 					<img
 						src={auth.state.user?.avatar}
@@ -317,27 +317,31 @@
 					<p class="font-semibold">
 						{(auth.state.user as any)?.full_name || auth.state.user?.username}
 					</p>
-					<CustomSelect
-						bind:value={privacy}
-						options={[
-							{ value: 'PUBLIC', label: 'Public' },
-							{ value: 'FRIENDS', label: 'Friends' },
-							{ value: 'ONLY_ME', label: 'Only Me' }
-						]}
-						placeholder="Privacy"
-						disabled={submitting}
-						style="w-[100px] h-6 text-xs"
-					/>
+					<!-- Privacy & Submit -->
+					<div class="flex items-center space-x-3">
+						<CustomSelect
+							bind:value={privacy}
+							options={[
+								{ value: 'PUBLIC', label: 'Public' },
+								{ value: 'FRIENDS', label: 'Friends' },
+								{ value: 'ONLY_ME', label: 'Only Me' }
+							]}
+							placeholder="Privacy"
+							disabled={submitting}
+							style="w-[90px]"
+							triggerClass="bg-secondary/40 hover:bg-secondary/60 h-6 px-2 rounded-md text-xs border-none"
+						/>
+					</div>
 				</div>
 			</div>
 
 			<!-- Input -->
-			<div class="relative mb-4 min-h-[150px]">
+			<div class="relative mb-2 min-h-[80px]">
 				<Textarea
 					placeholder={`What's on your mind, ${(auth.state.user as any)?.first_name || auth.state.user?.username}?`}
 					bind:value={postContent}
 					oninput={handleTextareaInput}
-					rows={4}
+					rows={3}
 					class="placeholder:text-muted-foreground/50 w-full resize-none border-none bg-transparent p-0 text-xl focus-visible:ring-0"
 					disabled={submitting}
 					autofocus
@@ -384,33 +388,35 @@
 				</div>
 			{/if}
 
-			<!-- Extra Features (Location, User Tagging) -->
+			<!-- Feature Inputs (Location / User Search) -->
 			{#if showLocationInput}
 				<div
-					class="bg-secondary/20 mb-2 flex items-center gap-2 rounded-lg border border-white/10 p-2"
+					class="glass-panel animate-in fade-in slide-in-from-top-1 mb-2 flex items-center space-x-2 rounded-lg p-2"
 				>
 					<MapPin size={18} class="text-red-500" />
 					<input
 						type="text"
 						placeholder="Where are you?"
 						bind:value={location}
-						class="flex-1 border-none bg-transparent p-0 text-sm focus:ring-0"
-						autoFocus
+						class="text-foreground w-full border-none bg-transparent text-sm focus:ring-0"
+						autofocus
 					/>
 					<button onclick={() => (showLocationInput = false)}><X size={16} /></button>
 				</div>
 			{/if}
 
 			{#if showUserTagger}
-				<div class="bg-secondary/20 relative mb-2 rounded-lg border border-white/10 p-2">
-					<div class="flex items-center gap-2">
+				<div
+					class="glass-panel animate-in fade-in slide-in-from-top-1 relative mb-2 rounded-lg p-2"
+				>
+					<div class="flex items-center space-x-2">
 						<UserPlus size={18} class="text-blue-500" />
 						<input
 							type="text"
-							placeholder="Tag friends..."
+							placeholder="Search for friends to tag..."
 							bind:value={userSearchQuery}
-							class="flex-1 border-none bg-transparent p-0 text-sm focus:ring-0"
-							autoFocus
+							class="text-foreground w-full border-none bg-transparent text-sm focus:ring-0"
+							autofocus
 						/>
 						<button onclick={() => (showUserTagger = false)}><X size={16} /></button>
 					</div>
@@ -424,61 +430,66 @@
 
 			<!-- Add to Your Post -->
 			<div
-				class="bg-background mb-4 flex items-center justify-between rounded-lg border border-white/10 px-4 py-3 shadow-sm"
+				class="bg-background/50 mb-4 flex items-center justify-between rounded-lg border border-white/10 p-3 shadow-sm"
 			>
-				<span class="text-sm font-semibold">Add to your post</span>
-				<div class="flex gap-1">
+				<p class="text-foreground text-sm font-semibold">Add to your post</p>
+
+				<input
+					type="file"
+					multiple
+					accept="image/*,video/*"
+					class="hidden"
+					bind:this={fileInput}
+					onchange={handleFileSelect}
+				/>
+
+				<div class="flex items-center gap-1">
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-green-500 hover:bg-green-500/10"
+						class="rounded-full text-green-400 transition-all hover:scale-110 hover:bg-green-500/10"
+						title="Photo/Video"
 						onclick={() => fileInput.click()}
 					>
-						<ImageIcon size={24} />
+						<ImageIcon size={22} />
 					</Button>
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-blue-500 hover:bg-blue-500/10"
+						class="rounded-full text-blue-400 transition-all hover:scale-110 hover:bg-blue-500/10"
+						title="Tag Friends"
 						onclick={toggleUserTagger}
 					>
-						<Tag size={24} />
+						<Tag size={22} />
 					</Button>
 					<span bind:this={emojiToggleButton}>
 						<Button
 							variant="ghost"
 							size="icon"
-							class="rounded-full text-yellow-500 hover:bg-yellow-500/10"
+							class="rounded-full text-yellow-400 transition-all hover:scale-110 hover:bg-yellow-500/10"
+							title="Feeling/Activity"
 							onclick={toggleEmojiPicker}
 						>
-							<Smile size={24} />
+							<Smile size={22} />
 						</Button>
 					</span>
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-red-500 hover:bg-red-500/10"
+						class="rounded-full text-red-400 transition-all hover:scale-110 hover:bg-red-500/10"
+						title="Check in"
 						onclick={toggleLocation}
 					>
-						<MapPin size={24} />
+						<MapPin size={22} />
 					</Button>
 				</div>
 			</div>
-
-			<input
-				type="file"
-				multiple
-				accept="image/*,video/*"
-				class="hidden"
-				bind:this={fileInput}
-				onchange={handleFileSelect}
-			/>
 
 			<!-- Submit Button -->
 			<Button
 				onclick={handleSubmit}
 				disabled={submitting || (!postContent.trim() && mediaItems.length === 0)}
-				class="w-full font-semibold"
+				class="mt-4 w-full font-semibold"
 			>
 				{submitting ? 'Posting...' : 'Post'}
 			</Button>

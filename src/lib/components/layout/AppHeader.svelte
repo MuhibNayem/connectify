@@ -258,7 +258,9 @@
 
 			<!-- Dropdown Menu (Reusing logic for desktop profile menu if needed, simplified here as user menu) -->
 			{#if mobileMenuOpen}
-				<div class="glass-card absolute right-0 z-50 mt-2 flex w-60 flex-col space-y-1 p-2">
+				<div
+					class="bg-popover border-border/40 absolute right-0 z-50 mt-2 flex w-60 flex-col space-y-1 rounded-xl border p-2 shadow-xl"
+				>
 					<a
 						href={`/profile/${auth.state.user?.id}`}
 						class="flex items-center space-x-3 rounded-lg p-2 hover:bg-white/10"
