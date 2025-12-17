@@ -50,6 +50,19 @@ export const setNotifications = (fetchedNotifications: Notification[], totalUnre
   }));
 };
 
+// Helper for infinite scroll
+export const appendNotifications = (newNotifications: Notification[]) => {
+  notifications.update((state) => {
+    // Prevent duplicates
+    const existingIds = new Set(state.notifications.map(n => n.id));
+    const uniqueNew = newNotifications.filter(n => !existingIds.has(n.id));
+    return {
+      ...state,
+      notifications: [...state.notifications, ...uniqueNew],
+    };
+  });
+}
+
 export const setUnreadCount = (count: number) => {
   notifications.update((state) => ({ ...state, unreadCount: count }));
 };

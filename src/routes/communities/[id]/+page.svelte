@@ -1,25 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { getPosts, type Community } from '$lib/api';
-	import { getCommunity } from '$lib/api';
+	import { getPosts, getCommunity, type Community } from '$lib/api';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostCreator from '$lib/components/feed/PostCreator.svelte';
 	import type { Post } from '$lib/types';
+	import Skeleton from '$lib/components/ui/skeleton/Skeleton.svelte';
+	import { Info, Calendar, Globe, GlobeLock } from '@lucide/svelte';
 
-	let id = $page.params.id;
-	let community: Community | null = null;
-	let posts: Post[] = [];
-	let loading = true;
-	let error = '';
+	let id = $derived($page.params.id);
+	let community = $state<Community | null>(null);
+	let posts = $state<Post[]>([]);
+	let loading = $state(true);
+	let error = $state('');
 
-	async function loadCommunityAndFeed() {
+	async function loadFeed() {
 		loading = true;
 		try {
-			// Fetch community details to check membership/privacy
-			// (Layout also fetches it, but we might need it here for conditional rendering logic
-			// if not passed via context/stores. For now, fetching again is safer/simpler)
+			// Fetch community details (lightweight check, mostly cached ideally)
 			community = await getCommunity(id);
 
 			// Fetch posts
@@ -38,27 +36,29 @@
 	}
 
 	onMount(() => {
-		loadCommunityAndFeed();
+		loadFeed();
 	});
 </script>
 
-<div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
-	<!-- Main Feed -->
+<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+	<!-- Left: Feed (cols-2) -->
 	<div class="space-y-6 lg:col-span-2">
 		{#if error}
-			<div class="rounded-xl bg-red-50 p-4 text-red-600">{error}</div>
+			<div class="glass-panel border-red-500/30 bg-red-500/10 p-4 text-red-500">{error}</div>
 		{/if}
 
-		<!-- Create Post Widget (Only if member) -->
+		<!-- Create Post -->
 		{#if community?.is_member}
-			<PostCreator communityId={id} on:postCreated={handlePostCreated} />
+			<div class="relative z-10">
+				<PostCreator communityId={id} on:postCreated={handlePostCreated} />
+			</div>
 		{/if}
 
 		<!-- Posts Feed -->
 		{#if loading}
 			<div class="space-y-4">
 				{#each Array(3) as _}
-					<div class="h-64 animate-pulse rounded-xl bg-white dark:bg-gray-800" />
+					<div class="glass-card h-64 animate-pulse rounded-xl" />
 				{/each}
 			</div>
 		{:else if posts.length > 0}
@@ -68,32 +68,53 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="py-12 text-center text-gray-500">
-				<p>No posts yet. Be the first to share something!</p>
+			<div class="glass-panel text-muted-foreground p-12 text-center">
+				<p class="text-lg">No posts yet.</p>
+				<p class="text-sm">Be the first to share something with the group!</p>
 			</div>
 		{/if}
 	</div>
 
-	<!-- Sidebar -->
-	<div class="space-y-6">
+	<!-- Right: Sidebar Widgets -->
+	<div class="space-y-6 lg:sticky lg:top-24">
 		<!-- About Card -->
-		<div
-			class="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700/50 dark:bg-gray-800"
-		>
-			<h3 class="mb-4 font-bold text-gray-900 dark:text-white">About</h3>
-			<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-				{community?.description || 'Loading...'}
+		<div class="glass-card rounded-xl p-5">
+			<h3 class="mb-4 flex items-center gap-2 text-lg font-bold">
+				<Info size={20} class="text-primary" /> About
+			</h3>
+			<p class="text-muted-foreground mb-4 text-sm leading-relaxed">
+				{community?.description || 'No description provided.'}
 			</p>
-			<div class="space-y-3">
-				<div class="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-					<span class="w-5 text-center">🌍</span>
-					<span class="capitalize">{community?.privacy || 'Public'}</span>
+
+			<div class="space-y-3 border-t border-white/10 pt-2">
+				<div class="flex items-center gap-3 text-sm font-medium">
+					{#if community?.privacy === 'public'}
+						<Globe size={18} /> Public
+					{:else}
+						<GlobeLock size={18} /> Private
+					{/if}
+					<span class="text-muted-foreground font-normal">
+						{community?.privacy === 'public'
+							? "Anyone can see who's in the group and what they post."
+							: "Only members can see who's in the group and what they post."}
+					</span>
 				</div>
-				<div class="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-					<span class="w-5 text-center">📅</span>
-					Created {community ? new Date(community.created_at).toLocaleDateString() : ''}
+				<div class="flex items-center gap-3 text-sm font-medium">
+					<Calendar size={18} />
+					<span
+						>Created {community
+							? new Date(community.created_at).toLocaleDateString(undefined, {
+									year: 'numeric',
+									month: 'long',
+									day: 'numeric'
+								})
+							: '...'}</span
+					>
 				</div>
 			</div>
 		</div>
+
+		<!-- Members Widget (Mock) -->
+		<!-- Future: Add 'Recently Joined' or 'Admins' widget here -->
 	</div>
 </div>

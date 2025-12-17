@@ -1,51 +1,67 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { getFriendships } from '$lib/api';
-	import { onMount } from 'svelte';
-	import { websocketMessages } from '$lib/websocket';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
-	import Skeleton from '$lib/components/ui/skeleton/Skeleton.svelte';
-	import { Users, Globe, Calendar, ShoppingBag, Settings, User } from '@lucide/svelte';
+	import {
+		Users,
+		Globe,
+		Calendar,
+		ShoppingBag,
+		Settings,
+		Bookmark,
+		Clock,
+		ChevronDown,
+		MonitorPlay
+	} from '@lucide/svelte';
 
 	let currentUser = $derived(auth.state.user);
-	let friends = $state<any[]>([]);
-	let loading = $state(true);
-	let error = $state<string | null>(null);
-	let presenceState = $state<Record<string, { status: string; last_seen?: string }>>({});
 
-	async function fetchFriends() {
-		try {
-			const response = await getFriendships('accepted');
-			friends = response.data || [];
-		} catch (err: any) {
-			error = err.message;
-		} finally {
-			loading = false;
+	// Facebook-style Left Sidebar Items
+	const mainNavItems = [
+		{
+			href: '/friends',
+			label: 'Friends',
+			icon: Users,
+			color: 'text-blue-500',
+			bg: 'bg-transparent'
+		}, // FB uses specific icons, we'll simulate
+		{
+			href: '/communities',
+			label: 'Communities',
+			icon: Users,
+			color: 'text-white',
+			bg: 'bg-blue-500'
+		}, // Groups often circular blue
+		{
+			href: '/marketplace',
+			label: 'Marketplace',
+			icon: ShoppingBag,
+			color: 'text-white',
+			bg: 'bg-blue-500'
+		},
+		{ href: '/events', label: 'Events', icon: Calendar, color: 'text-white', bg: 'bg-red-500' },
+		{ href: '/memories', label: 'Memories', icon: Clock, color: 'text-white', bg: 'bg-blue-400' },
+		{ href: '/saved', label: 'Saved', icon: Bookmark, color: 'text-white', bg: 'bg-purple-500' },
+		{ href: '/video', label: 'Video', icon: MonitorPlay, color: 'text-white', bg: 'bg-blue-500' },
+		{
+			href: '/settings',
+			label: 'Settings',
+			icon: Settings,
+			color: 'text-foreground',
+			bg: 'bg-secondary'
 		}
-	}
+	];
 
-	$effect(() => {
-		if (currentUser) {
-			fetchFriends();
+	// Mock Shortcuts
+	const shortcuts = [
+		{ id: 1, name: 'Svelte Developers', image: 'https://github.com/sveltejs.png' },
+		{ id: 2, name: 'Tailwind CSS', image: 'https://github.com/tailwindlabs.png' },
+		{
+			id: 3,
+			name: 'Web Design Trends',
+			image: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=50&h=50&fit=crop'
 		}
-	});
-
-	onMount(() => {
-		const unsubscribe = websocketMessages.subscribe((event) => {
-			if (event?.type === 'PresenceUpdate') {
-				const { user_id, status, last_seen } = event.data;
-				presenceState = {
-					...presenceState,
-					[user_id]: { status, last_seen }
-				};
-			}
-		});
-
-		return () => {
-			unsubscribe();
-		};
-	});
+	];
 
 	function isActive(path: string) {
 		return $page.url.pathname === path;
@@ -57,87 +73,81 @@
 	{#if currentUser}
 		<a
 			href={`/profile/${currentUser.id}`}
-			class="text-foreground hover:bg-primary/10 flex items-center space-x-3 rounded-xl border-transparent bg-transparent p-2 transition-all hover:shadow-sm"
+			class="flex items-center space-x-3 rounded-lg border-transparent p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10"
 		>
-			<Avatar class="ring-primary/20 h-8 w-8 ring-2">
+			<Avatar class="h-9 w-9 border border-black/10">
 				<AvatarImage src={currentUser.avatar} alt={currentUser.username} />
 				<AvatarFallback>{currentUser.username.charAt(0).toUpperCase()}</AvatarFallback>
 			</Avatar>
-			<span class="font-medium">{currentUser.full_name || currentUser.username}</span>
+			<span class="text-foreground font-semibold"
+				>{currentUser.full_name || currentUser.username}</span
+			>
 		</a>
 	{/if}
 
 	<!-- Main Navigation Links -->
 	<nav class="space-y-1">
-		{#each [{ href: '/friends', label: 'Friends', icon: Users }, { href: '/communities', label: 'Communities', icon: Globe }, { href: '/events', label: 'Events', icon: Calendar }, { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag }, { href: '/settings', label: 'Settings', icon: Settings }] as item}
+		{#each mainNavItems as item}
 			<a
 				href={item.href}
-				class="hover:bg-primary/10 hover:text-primary flex items-center space-x-3 rounded-xl p-3 transition-all duration-200 hover:scale-[1.02] active:scale-95 {isActive(
+				class="group flex items-center space-x-3 rounded-lg p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10 {isActive(
 					item.href
 				)
-					? 'bg-primary/15 text-primary font-semibold shadow-sm'
-					: 'text-muted-foreground'}"
+					? 'bg-black/5 dark:bg-white/10'
+					: ''}"
 			>
-				<svelte:component
-					this={item.icon}
-					size={22}
-					class={isActive(item.href)
-						? 'text-primary'
-						: 'text-muted-foreground group-hover:text-primary'}
-				/>
-				<span>{item.label}</span>
+				{#if item.label === 'Friends'}
+					<!-- Special style for Friends roughly matching generic icon if needed, or consistent circle -->
+					<div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-white">
+						<svelte:component this={item.icon} size={20} />
+					</div>
+				{:else if item.bg !== 'bg-transparent'}
+					<div
+						class={`flex h-9 w-9 items-center justify-center rounded-full ${item.bg} ${item.color}`}
+					>
+						<svelte:component this={item.icon} size={20} />
+					</div>
+				{:else}
+					<div
+						class="bg-secondary text-foreground flex h-9 w-9 items-center justify-center rounded-full"
+					>
+						<svelte:component this={item.icon} size={20} />
+					</div>
+				{/if}
+				<span class="text-foreground/90 font-medium">{item.label}</span>
 			</a>
 		{/each}
+
+		<button
+			class="flex w-full items-center space-x-3 rounded-lg p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10"
+		>
+			<div class="bg-secondary flex h-9 w-9 items-center justify-center rounded-full">
+				<ChevronDown size={20} />
+			</div>
+			<span class="text-foreground/90 font-medium">See more</span>
+		</button>
 	</nav>
 
 	<!-- Separator -->
-	<hr class="border-white/10" />
+	<hr class="border-border/50 mx-2" />
 
-	<!-- Friends List -->
+	<!-- Shortcuts -->
 	<div class="space-y-1">
-		<h3 class="text-muted-foreground px-2 text-xs font-semibold uppercase">Friends</h3>
-		{#if loading}
-			<div class="space-y-3 px-2">
-				{#each Array(3) as _}
-					<div class="flex items-center space-x-3">
-						<Skeleton class="bg-primary/10 h-8 w-8 rounded-full" />
-						<Skeleton class="bg-primary/10 h-4 w-24" />
-					</div>
-				{/each}
-			</div>
-		{:else if error}
-			<p class="p-2 text-red-500">{error}</p>
-		{:else if friends.length === 0}
-			<p class="text-muted-foreground p-2">No friends to show.</p>
-		{:else}
-			<ul class="space-y-1">
-				{#each friends as friend (friend.id)}
-					{@const friendUser =
-						friend.receiver_id === currentUser?.id ? friend.requester_info : friend.receiver_info}
-					{@const isOnline = presenceState[friendUser.id]?.status === 'online'}
-					<li>
-						<a
-							href={`/profile/${friendUser.id}`}
-							class="hover:bg-primary/10 flex items-center space-x-3 rounded-xl p-2 transition-all"
-						>
-							<div class="relative">
-								<Avatar class="h-8 w-8">
-									<AvatarImage src={friendUser.avatar} alt={friendUser.username} />
-									<AvatarFallback>{friendUser.username.charAt(0).toUpperCase()}</AvatarFallback>
-								</Avatar>
-								{#if isOnline}
-									<span
-										class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500"
-									></span>
-								{/if}
-							</div>
-							<span class="text-foreground/90 text-sm font-medium"
-								>{friendUser.full_name || friendUser.username}</span
-							>
-						</a>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+		<div class="flex items-center justify-between px-2 py-1">
+			<h3 class="text-muted-foreground text-sm font-semibold">Your shortcuts</h3>
+			<button
+				class="text-xs text-blue-500 opacity-0 transition-opacity hover:underline group-hover:opacity-100"
+				>Edit</button
+			>
+		</div>
+		{#each shortcuts as shortcut}
+			<a
+				href={`/communities/${shortcut.id}`}
+				class="flex items-center space-x-3 rounded-lg p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10"
+			>
+				<img src={shortcut.image} alt={shortcut.name} class="h-9 w-9 rounded-lg object-cover" />
+				<span class="text-foreground/90 font-medium">{shortcut.name}</span>
+			</a>
+		{/each}
 	</div>
 </div>

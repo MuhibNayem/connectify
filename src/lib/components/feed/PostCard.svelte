@@ -8,6 +8,7 @@
 	import { websocketMessages } from '$lib/websocket';
 	import CommentSection from './CommentSection.svelte';
 	import { goto } from '$app/navigation';
+	import { Heart, MessageSquare, Share2, MoreHorizontal } from '@lucide/svelte';
 
 	export let post: {
 		id: string;
@@ -303,29 +304,29 @@
 	<div class="flex justify-around pt-2">
 		<Button
 			variant="ghost"
-			class="flex items-center space-x-1 {isLikedByCurrentUser
-				? 'text-primary'
-				: 'text-muted-foreground'} hover:text-primary hover:bg-white/10"
+			class="text-muted-foreground hover:bg-primary/10 hover:text-primary flex flex-1 items-center justify-center space-x-2 rounded-lg transition-all {isLikedByCurrentUser
+				? 'text-red-500 hover:text-red-600'
+				: ''}"
 			onclick={handleLike}
 		>
-			<span class="text-xl">👍</span>
-			<span>{isLikedByCurrentUser ? 'Liked' : 'Like'}</span>
+			<Heart size={20} class={isLikedByCurrentUser ? 'fill-current' : ''} />
+			<span class="font-medium">{isLikedByCurrentUser ? 'Liked' : 'Like'}</span>
 		</Button>
 		<Button
 			variant="ghost"
-			class="text-muted-foreground hover:text-primary flex items-center space-x-1 hover:bg-white/10"
+			class="text-muted-foreground hover:bg-primary/10 hover:text-primary flex flex-1 items-center justify-center space-x-2 rounded-lg transition-all"
 			onclick={handleComment}
 		>
-			<span class="text-xl">💬</span>
-			<span>Comment</span>
+			<MessageSquare size={20} />
+			<span class="font-medium">Comment</span>
 		</Button>
 		<Button
 			variant="ghost"
-			class="text-muted-foreground hover:text-primary flex items-center space-x-1 hover:bg-white/10"
+			class="text-muted-foreground hover:bg-primary/10 hover:text-primary flex flex-1 items-center justify-center space-x-2 rounded-lg transition-all"
 			onclick={handleShare}
 		>
-			<span class="text-xl">🔗</span>
-			<span>Share</span>
+			<Share2 size={20} />
+			<span class="font-medium">Share</span>
 		</Button>
 	</div>
 
