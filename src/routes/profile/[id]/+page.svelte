@@ -9,6 +9,7 @@
 	import MediaViewer from '$lib/components/ui/MediaViewer.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import MediaSelector from '$lib/components/album/MediaSelector.svelte';
 	import {
 		Camera,
 		MapPin,
@@ -323,6 +324,40 @@
 		mediaViewerItems = items;
 		mediaViewerIndex = index;
 		mediaViewerOpen = true;
+	}
+
+	// Media Selector Logic
+	let mediaSelectorOpen = $state(false);
+	let addingMedia = $state(false);
+
+	async function handleAddMediaToAlbum(selectedItems: any[]) {
+		if (!selectedAlbum) return;
+		addingMedia = true;
+		try {
+			// Prepare payload: array of { url, type }
+			const mediaPayload = selectedItems.map((item) => ({
+				url: item.url,
+				type: item.type
+			}));
+
+			await apiRequest('POST', `/albums/${selectedAlbum.id}/media`, {
+				media: mediaPayload
+			});
+
+			// Refresh album media
+			await fetchAlbumMedia(selectedAlbum.id);
+
+			// Optimistically update cover if empty
+			if (!selectedAlbum.cover_url && mediaPayload.length > 0) {
+				fetchUserAlbums(userId); // Refresh album list to get new cover
+				selectedAlbum = { ...selectedAlbum, cover_url: mediaPayload[0].url };
+			}
+		} catch (err) {
+			console.error('Failed to add media to album', err);
+			alert('Failed to add photos to album.');
+		} finally {
+			addingMedia = false;
+		}
 	}
 </script>
 
@@ -753,25 +788,39 @@
 				{/if}
 			</div>
 		{:else if activeTab === 'photos'}
-			<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+			<div class="glass-card bg-card min-h-[500px] rounded-xl border border-white/5 p-4 shadow-sm">
 				{#if selectedAlbum}
-					<!-- Album Detail View -->
-					<div class="mb-4 flex items-center gap-4">
-						<Button
-							variant="secondary"
-							onclick={() => {
-								selectedAlbum = null;
-								albumMedia = [];
-							}}
-						>
-							<IconChevronLeft class="mr-2" size={20} /> Back to Albums
-						</Button>
-						<div>
-							<h2 class="text-2xl font-bold">{selectedAlbum.name}</h2>
-							{#if selectedAlbum.description}
-								<p class="text-muted-foreground text-sm">{selectedAlbum.description}</p>
-							{/if}
+					<!-- Album Content View -->
+					<div class="mb-4 flex items-center justify-between gap-4">
+						<div class="flex items-center gap-4">
+							<Button
+								variant="secondary"
+								onclick={() => {
+									selectedAlbum = null;
+									albumMedia = [];
+								}}
+							>
+								<IconChevronLeft class="mr-2" size={20} /> Back to Albums
+							</Button>
+							<div>
+								<h2 class="text-2xl font-bold">{selectedAlbum.name}</h2>
+								{#if selectedAlbum.description}
+									<p class="text-muted-foreground text-sm">{selectedAlbum.description}</p>
+								{/if}
+							</div>
 						</div>
+						{#if isCurrentUser && selectedAlbum.type === 'custom'}
+							<Button onclick={() => (mediaSelectorOpen = true)} disabled={addingMedia}>
+								{#if addingMedia}
+									<div
+										class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+									></div>
+									Adding...
+								{:else}
+									<Plus size={18} class="mr-2" /> Add Photos
+								{/if}
+							</Button>
+						{/if}
 					</div>
 
 					{#if loadingAlbumMedia}
@@ -782,28 +831,24 @@
 						</div>
 					{:else if albumMedia.length > 0}
 						<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-							{#each albumMedia as photo, i}
+							{#each albumMedia as item, i}
 								<div
-									class="group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-black/10"
+									class="group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-black"
 									onclick={() => openMediaViewer(albumMedia, i)}
 								>
-									{#if photo.type === 'video'}
-										<video src={photo.url} class="h-full w-full object-cover"></video>
+									{#if item.type === 'image'}
+										<img
+											src={item.url}
+											alt="Album media"
+											class="h-full w-full object-cover transition duration-300 group-hover:scale-110 group-hover:opacity-90"
+										/>
+									{:else if item.type === 'video'}
+										<video
+											src={item.url}
+											class="h-full w-full object-cover transition duration-300 group-hover:scale-110 group-hover:opacity-90"
+										></video>
 										<div class="absolute inset-0 flex items-center justify-center">
 											<div class="rounded-full bg-black/50 p-2 text-white">▶</div>
-										</div>
-									{:else}
-										<img
-											src={photo.url}
-											alt="Media"
-											class="h-full w-full object-cover transition duration-300 group-hover:scale-110"
-										/>
-									{/if}
-									{#if photo.caption}
-										<div
-											class="absolute bottom-0 left-0 right-0 bg-black/60 p-2 text-xs text-white opacity-0 transition group-hover:opacity-100"
-										>
-											{photo.caption}
 										</div>
 									{/if}
 								</div>
@@ -817,11 +862,9 @@
 								<Folder size={32} class="opacity-50" />
 							</div>
 							<p>This album is empty.</p>
-							{#if isCurrentUser && selectedAlbum.type !== 'timeline' && selectedAlbum.type !== 'profile' && selectedAlbum.type !== 'cover'}
-								<Button
-									variant="outline"
-									class="mt-4"
-									onclick={() => console.log('Add photos logic')}>Add Photos</Button
+							{#if isCurrentUser && selectedAlbum.type === 'custom'}
+								<Button variant="outline" class="mt-4" onclick={() => (mediaSelectorOpen = true)}
+									>Add Photos</Button
 								>
 							{/if}
 						</div>
@@ -917,3 +960,10 @@
 {:else}
 	<p>User not found.</p>
 {/if}
+
+<!-- Media Selector Component -->
+<MediaSelector
+	bind:open={mediaSelectorOpen}
+	userId={auth.state.user?.id || ''}
+	onSelect={handleAddMediaToAlbum}
+/>
