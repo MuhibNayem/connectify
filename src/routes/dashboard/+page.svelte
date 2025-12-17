@@ -10,12 +10,25 @@
 	import { intersect } from '$lib/actions/intersect';
 	import { websocketMessages } from '$lib/websocket';
 	import Skeleton from '$lib/components/ui/skeleton/Skeleton.svelte';
+	import MediaViewer from '$lib/components/ui/MediaViewer.svelte';
 
-	let posts: any[] = [];
-	let loadingPosts: boolean = true;
-	let errorPosts: string | null = null;
-	let currentPage = 1;
-	let hasMore = true;
+	// State
+	let posts = $state<any[]>([]);
+	let loadingPosts = $state(true);
+	let errorPosts = $state<string | null>(null);
+	let currentPage = $state(1);
+	let hasMore = $state(true);
+
+	// Media Viewer State
+	let mediaViewerOpen = $state(false);
+	let mediaViewerItems = $state<any[]>([]);
+	let mediaViewerIndex = $state(0);
+
+	function openMediaViewer(items: any[], index: number) {
+		mediaViewerItems = items;
+		mediaViewerIndex = index;
+		mediaViewerOpen = true;
+	}
 
 	async function fetchPosts(page = 1) {
 		if (!hasMore && page > 1) return;
@@ -79,6 +92,13 @@
 	});
 </script>
 
+<MediaViewer
+	open={mediaViewerOpen}
+	media={mediaViewerItems}
+	initialIndex={mediaViewerIndex}
+	onClose={() => (mediaViewerOpen = false)}
+/>
+
 <div class="flex min-h-screen justify-center font-sans">
 	<div
 		class="grid w-full max-w-[1920px] grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[360px_680px_360px] xl:justify-center"
@@ -133,7 +153,10 @@
 				{:else}
 					<div class="w-full space-y-5">
 						{#each posts as post (post.id)}
-							<PostCard {post} />
+							<PostCard
+								{post}
+								on:viewMedia={(e) => openMediaViewer(e.detail.media, e.detail.index)}
+							/>
 						{/each}
 					</div>
 				{/if}

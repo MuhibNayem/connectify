@@ -4,10 +4,25 @@
 	import { auth } from '$lib/stores/auth.svelte';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
 	import { Button } from '$lib/components/ui/button';
-	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostCreator from '$lib/components/feed/PostCreator.svelte';
-	import { Camera, MapPin, Link as LinkIcon, Calendar, MoreHorizontal } from '@lucide/svelte';
+	import MediaViewer from '$lib/components/ui/MediaViewer.svelte';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import {
+		Camera,
+		MapPin,
+		Link as LinkIcon,
+		Calendar,
+		MoreHorizontal,
+		Folder,
+		Video,
+		Plus,
+		X,
+		ChevronLeft as IconChevronLeft
+	} from '@lucide/svelte';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 
 	let userId = $state('');
 	let user = $state<any | null>(null);
@@ -28,6 +43,25 @@
 	let coverInput: HTMLInputElement;
 	let isUploading = $state(false);
 
+	// Media Viewer
+	let mediaViewerOpen = $state(false);
+	let mediaViewerItems = $state<any[]>([]);
+	let mediaViewerIndex = $state(0);
+
+	// Albums
+	let albums = $state<any[]>([]);
+	let loadingAlbums = $state(false);
+	let selectedAlbum = $state<any | null>(null); // If null, show album list. If set, show album content.
+	let albumMedia = $state<any[]>([]);
+	let loadingAlbumMedia = $state(false);
+	let createAlbumDialogOpen = $state(false);
+	let newAlbumName = $state('');
+	let newAlbumDesc = $state('');
+
+	// Videos
+	let userVideos = $state<any[]>([]);
+	let loadingVideos = $state(false);
+
 	async function sendFriendRequest() {
 		sendingRequest = true;
 		try {
@@ -47,7 +81,9 @@
 			fetchUserProfile(userId);
 			fetchUserPosts(userId);
 			fetchUserFriends(userId);
-			activeTab = 'posts'; // Reset tab on navigation
+			fetchUserPhotos(userId); // For sidebar
+			activeTab = 'posts';
+			selectedAlbum = null; // Reset album view
 		}
 	});
 
@@ -72,16 +108,21 @@
 
 			const updatedUser = await updateUserProfile(payload);
 
-			// 3. Update Local State
-			user = { ...user, ...payload };
+			// 3. Update Local State (Visually immediate)
+			user = { ...user, ...updatedUser }; // Merge cleanly
 			if (isCurrentUser) {
-				auth.updateUser(updatedUser);
+				auth.updateUser(user);
 			}
+
+			// Refresh posts/albums as new post is created in backend
+			setTimeout(() => {
+				fetchUserPosts(userId);
+				if (activeTab === 'photos') fetchUserAlbums(userId);
+			}, 1000);
 		} catch (error) {
 			console.error(`Failed to update ${type}:`, error);
 		} finally {
 			isUploading = false;
-			// Reset input
 			input.value = '';
 		}
 	}
@@ -92,7 +133,6 @@
 		try {
 			user = await apiRequest('GET', `/users/${id}`);
 
-			// Friendship check only if not current user
 			if (!isCurrentUser && auth.state.user) {
 				try {
 					const friendshipCheck = await apiRequest('GET', `/friendships/check?other_user_id=${id}`);
@@ -134,7 +174,6 @@
 	async function fetchUserFriends(id: string) {
 		loadingFriends = true;
 		try {
-			// Fetch accepted friendships for this user
 			const response = await apiRequest('GET', `/friendships?user_id=${id}&status=accepted`);
 			const acceptedFriendships: any[] = response.data;
 
@@ -142,12 +181,9 @@
 				friends = [];
 				return;
 			}
-
-			// Fetch details for each friend
 			const friendUserPromises = acceptedFriendships.map(async (friendship) => {
 				const friendId =
 					friendship.requester_id === id ? friendship.receiver_id : friendship.requester_id;
-
 				try {
 					const friendDetails = await apiRequest('GET', `/users/${friendId}`);
 					return {
@@ -160,7 +196,6 @@
 					return null;
 				}
 			});
-
 			const results = await Promise.all(friendUserPromises);
 			friends = results.filter((f) => f !== null);
 		} catch (err) {
@@ -170,8 +205,124 @@
 		}
 	}
 
+	let userPhotos = $state<any[]>([]); // For sidebar
+	let loadingPhotos = $state(false);
+
+	async function fetchUserPhotos(id: string) {
+		loadingPhotos = true;
+		try {
+			const response = await apiRequest(
+				'GET',
+				`/posts?user_id=${id}&has_media=true&media_type=image&limit=9`
+			);
+			const photos: any[] = [];
+			const postsWithMedia = response.posts || [];
+			postsWithMedia.forEach((post: any) => {
+				if (post.media) {
+					post.media.forEach((item: any) => {
+						if (item.type === 'image') photos.push(item);
+					});
+				}
+			});
+			userPhotos = photos;
+		} catch (err) {
+			console.error('Failed to fetch user photos:', err);
+		} finally {
+			loadingPhotos = false;
+		}
+	}
+
+	async function fetchUserAlbums(id: string) {
+		loadingAlbums = true;
+		try {
+			const data = await apiRequest('GET', `/users/${id}/albums`);
+			albums = data || [];
+		} catch (err) {
+			console.error('Failed to fetch albums', err);
+		} finally {
+			loadingAlbums = false;
+		}
+	}
+
+	async function fetchAlbumMedia(albumId: string) {
+		loadingAlbumMedia = true;
+		albumMedia = [];
+		try {
+			// Default limit 50 for now, could implement scrolling pagination later
+			const media = await apiRequest('GET', `/albums/${albumId}/media?limit=50`);
+			albumMedia = media || [];
+		} catch (err) {
+			console.error('Failed to fetch album media', err);
+		} finally {
+			loadingAlbumMedia = false;
+		}
+	}
+
+	function openAlbum(album: any) {
+		selectedAlbum = album;
+		fetchAlbumMedia(album.id);
+	}
+
+	async function fetchUserVideos(id: string) {
+		loadingVideos = true;
+		try {
+			const response = await apiRequest(
+				'GET',
+				`/posts?user_id=${id}&has_media=true&media_type=video&limit=50`
+			);
+			const videos: any[] = [];
+			const postsWithMedia = response.posts || [];
+			postsWithMedia.forEach((post: any) => {
+				if (post.media) {
+					post.media.forEach((item: any) => {
+						if (item.type === 'video') videos.push(item);
+					});
+				}
+			});
+			userVideos = videos;
+		} catch (err) {
+			console.error('Failed to fetch videos', err);
+		} finally {
+			loadingVideos = false;
+		}
+	}
+
+	async function createAlbum() {
+		if (!newAlbumName) return;
+		try {
+			const newAlbum = await apiRequest('POST', '/albums', {
+				name: newAlbumName,
+				description: newAlbumDesc,
+				privacy: 'public'
+			});
+			albums = [newAlbum, ...albums];
+			createAlbumDialogOpen = false;
+			newAlbumName = '';
+			newAlbumDesc = '';
+		} catch (err) {
+			console.error('Failed to create album', err);
+		}
+	}
+
+	$effect(() => {
+		if (activeTab === 'photos' && userId) {
+			fetchUserAlbums(userId);
+			selectedAlbum = null;
+			albumMedia = [];
+		}
+		if (activeTab === 'videos' && userId) {
+			fetchUserVideos(userId);
+		}
+	});
+
 	function handlePostCreated(event: CustomEvent) {
 		posts = [event.detail, ...posts];
+	}
+
+	function openMediaViewer(items: any[], index: number) {
+		mediaViewerItems = items;
+		mediaViewerIndex = index;
+		mediaViewerOpen = true;
 	}
 </script>
 
@@ -187,12 +338,50 @@
 		<Button href="/" variant="link">Go Home</Button>
 	</div>
 {:else if user}
+	<MediaViewer
+		open={mediaViewerOpen}
+		media={mediaViewerItems}
+		initialIndex={mediaViewerIndex}
+		onClose={() => (mediaViewerOpen = false)}
+	/>
+
+	<!-- Create Album Dialog -->
+	<!-- Create Album Dialog Custom -->
+	<!-- Create Album Dialog -->
+	<Dialog.Root bind:open={createAlbumDialogOpen}>
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Create Album</Dialog.Title>
+				<Dialog.Description>Create a new album to organize your photos.</Dialog.Description>
+			</Dialog.Header>
+			<div class="space-y-4 py-4">
+				<div class="space-y-2">
+					<Label>Name</Label>
+					<Input bind:value={newAlbumName} placeholder="Album Name" />
+				</div>
+				<div class="space-y-2">
+					<Label>Description</Label>
+					<Input bind:value={newAlbumDesc} placeholder="Description (optional)" />
+				</div>
+			</div>
+			<Dialog.Footer>
+				<Button variant="ghost" onclick={() => (createAlbumDialogOpen = false)}>Cancel</Button>
+				<Button onclick={createAlbum} disabled={!newAlbumName}>Create</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Root>
+
 	<div class="bg-card pb-4 shadow-sm">
 		<div class="mx-auto max-w-[1095px]">
 			<!-- Cover Photo -->
 			<div class="relative h-[350px] w-full overflow-hidden rounded-b-xl bg-gray-200 md:h-[400px]">
 				{#if user.cover_picture}
-					<img src={user.cover_picture} alt="Cover" class="h-full w-full object-cover" />
+					<img
+						src={user.cover_picture}
+						alt="Cover"
+						class="h-full w-full cursor-pointer object-cover"
+						onclick={() => openMediaViewer([{ type: 'image', url: user.cover_picture }], 0)}
+					/>
 				{:else}
 					<div
 						class="flex h-full w-full items-center justify-center bg-gradient-to-r from-gray-100 to-gray-200 text-gray-400"
@@ -224,7 +413,14 @@
 					<!-- Avatar -->
 					<div class="relative -mt-20 md:-mt-8">
 						<div class="bg-card relative rounded-full p-1">
-							<Avatar class="border-card h-[168px] w-[168px] border-4 bg-white object-cover">
+							<Avatar
+								class="border-card h-[168px] w-[168px] cursor-pointer border-4 bg-white object-cover"
+								onclick={() =>
+									openMediaViewer(
+										[{ type: 'image', url: user.avatar || 'https://github.com/shadcn.png' }],
+										0
+									)}
+							>
 								<AvatarImage
 									src={user.avatar || 'https://github.com/shadcn.png'}
 									alt={user.username}
@@ -237,7 +433,10 @@
 							{#if isCurrentUser}
 								<button
 									class="border-card absolute bottom-2 right-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 bg-gray-200 text-black hover:bg-gray-300"
-									onclick={() => avatarInput.click()}
+									onclick={(e) => {
+										e.stopPropagation();
+										avatarInput.click();
+									}}
 									disabled={isUploading}
 								>
 									<Camera size={20} />
@@ -326,12 +525,23 @@
 					>
 						Photos
 					</Button>
-					<Button
-						variant="ghost"
-						class="text-muted-foreground hover:bg-secondary/50 flex h-12 items-center gap-1 rounded-lg px-4 font-semibold"
-					>
-						More <MoreHorizontal size={16} />
-					</Button>
+
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							<Button
+								variant="ghost"
+								class={`hover:bg-secondary/50 h-12 rounded-lg px-4 font-semibold ${activeTab === 'videos' ? 'text-primary border-primary rounded-none border-b-2' : 'text-muted-foreground'}`}
+							>
+								More <MoreHorizontal size={16} class="ml-1" />
+							</Button>
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="start">
+							<DropdownMenu.Item onclick={() => (activeTab = 'videos')}>
+								<Video class="mr-2 h-4 w-4" />
+								<span>Videos</span>
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
 				</div>
 			</div>
 		</div>
@@ -382,7 +592,7 @@
 						>
 					</div>
 
-					<!-- Photos Widget (Mock) -->
+					<!-- Photos Widget -->
 					<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
 						<div class="mb-2 flex items-center justify-between">
 							<h2 class="text-xl font-bold">Photos</h2>
@@ -391,10 +601,20 @@
 							>
 						</div>
 						<div class="grid grid-cols-3 gap-1 overflow-hidden rounded-lg">
-							<!-- Mock Photos -->
-							<div class="bg-secondary aspect-square rounded-sm"></div>
-							<div class="bg-secondary aspect-square rounded-sm"></div>
-							<div class="bg-secondary aspect-square rounded-sm"></div>
+							{#if userPhotos.length > 0}
+								{#each userPhotos.slice(0, 9) as photo, i}
+									<div
+										class="bg-secondary aspect-square cursor-pointer"
+										onclick={() => openMediaViewer(userPhotos, i)}
+									>
+										<img src={photo.url} alt="User photo" class="h-full w-full object-cover" />
+									</div>
+								{/each}
+							{:else}
+								<div class="text-muted-foreground col-span-3 py-4 text-center text-xs">
+									No photos
+								</div>
+							{/if}
 						</div>
 					</div>
 
@@ -480,7 +700,10 @@
 					{:else}
 						<div class="space-y-4">
 							{#each posts as post (post.id)}
-								<PostCard {post} />
+								<PostCard
+									{post}
+									on:viewMedia={(e) => openMediaViewer(e.detail.media, e.detail.index)}
+								/>
 							{/each}
 						</div>
 					{/if}
@@ -529,10 +752,165 @@
 					</div>
 				{/if}
 			</div>
-		{:else}
-			<div class="glass-card bg-card rounded-xl border border-white/5 p-8 text-center shadow-sm">
-				<h2 class="mb-2 text-2xl font-bold capitalize">{activeTab}</h2>
-				<p class="text-muted-foreground">This section is coming soon.</p>
+		{:else if activeTab === 'photos'}
+			<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+				{#if selectedAlbum}
+					<!-- Album Detail View -->
+					<div class="mb-4 flex items-center gap-4">
+						<Button
+							variant="secondary"
+							onclick={() => {
+								selectedAlbum = null;
+								albumMedia = [];
+							}}
+						>
+							<IconChevronLeft class="mr-2" size={20} /> Back to Albums
+						</Button>
+						<div>
+							<h2 class="text-2xl font-bold">{selectedAlbum.name}</h2>
+							{#if selectedAlbum.description}
+								<p class="text-muted-foreground text-sm">{selectedAlbum.description}</p>
+							{/if}
+						</div>
+					</div>
+
+					{#if loadingAlbumMedia}
+						<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+							{#each Array(8) as _}
+								<div class="bg-secondary/50 aspect-square animate-pulse rounded-lg"></div>
+							{/each}
+						</div>
+					{:else if albumMedia.length > 0}
+						<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+							{#each albumMedia as photo, i}
+								<div
+									class="group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-black/10"
+									onclick={() => openMediaViewer(albumMedia, i)}
+								>
+									{#if photo.type === 'video'}
+										<video src={photo.url} class="h-full w-full object-cover"></video>
+										<div class="absolute inset-0 flex items-center justify-center">
+											<div class="rounded-full bg-black/50 p-2 text-white">▶</div>
+										</div>
+									{:else}
+										<img
+											src={photo.url}
+											alt="Media"
+											class="h-full w-full object-cover transition duration-300 group-hover:scale-110"
+										/>
+									{/if}
+									{#if photo.caption}
+										<div
+											class="absolute bottom-0 left-0 right-0 bg-black/60 p-2 text-xs text-white opacity-0 transition group-hover:opacity-100"
+										>
+											{photo.caption}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<div class="text-muted-foreground col-span-full py-12 text-center">
+							<div
+								class="bg-secondary/30 mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full"
+							>
+								<Folder size={32} class="opacity-50" />
+							</div>
+							<p>This album is empty.</p>
+							{#if isCurrentUser && selectedAlbum.type !== 'timeline' && selectedAlbum.type !== 'profile' && selectedAlbum.type !== 'cover'}
+								<Button
+									variant="outline"
+									class="mt-4"
+									onclick={() => console.log('Add photos logic')}>Add Photos</Button
+								>
+							{/if}
+						</div>
+					{/if}
+				{:else}
+					<!-- Albums List View -->
+					<div class="mb-4 flex items-center justify-between">
+						<h2 class="text-2xl font-bold">Albums</h2>
+						{#if isCurrentUser}
+							<Button onclick={() => (createAlbumDialogOpen = true)}
+								><Plus class="mr-2 h-4 w-4" /> Create Album</Button
+							>
+						{/if}
+					</div>
+					{#if loadingAlbums}
+						<div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+							{#each Array(4) as _}
+								<div class="bg-secondary/50 aspect-square animate-pulse rounded-lg"></div>
+							{/each}
+						</div>
+					{:else if albums.length === 0}
+						<div class="text-muted-foreground p-8 text-center">No albums found.</div>
+					{:else}
+						<div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+							{#each albums as album}
+								<div class="group cursor-pointer space-y-2" onclick={() => openAlbum(album)}>
+									<div
+										class="bg-secondary relative aspect-square overflow-hidden rounded-lg border border-white/5"
+									>
+										{#if album.cover_url}
+											<img
+												src={album.cover_url}
+												alt={album.name}
+												class="h-full w-full object-cover transition group-hover:scale-105"
+											/>
+										{:else}
+											<div
+												class="text-muted-foreground flex h-full w-full flex-col items-center justify-center"
+											>
+												<Folder size={40} strokeWidth={1.5} />
+											</div>
+										{/if}
+										<div
+											class="absolute inset-0 bg-black/0 transition group-hover:bg-black/10"
+										></div>
+									</div>
+									<div>
+										<h3 class="truncate font-semibold leading-tight group-hover:underline">
+											{album.name}
+										</h3>
+										<p class="text-muted-foreground text-xs capitalize">
+											{album.type === 'custom' ? 'Album' : album.type.replace('_', ' ')}
+										</p>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			</div>
+		{:else if activeTab === 'videos'}
+			<div class="glass-card bg-card rounded-xl border border-white/5 p-4 shadow-sm">
+				<h2 class="mb-4 text-2xl font-bold">Videos</h2>
+				{#if loadingVideos}
+					<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+						{#each Array(4) as _}
+							<div class="bg-secondary/50 aspect-square animate-pulse rounded-lg"></div>
+						{/each}
+					</div>
+				{:else if userVideos.length === 0}
+					<div class="text-muted-foreground p-8 text-center">No videos found.</div>
+				{:else}
+					<div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+						{#each userVideos as video}
+							<div
+								class="group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-black"
+								onclick={() => openMediaViewer([video], 0)}
+							>
+								<video
+									src={video.url}
+									class="h-full w-full object-cover transition duration-300 group-hover:scale-110 group-hover:opacity-75"
+								></video>
+								<div class="absolute inset-0 flex items-center justify-center">
+									<div class="rounded-full bg-black/50 p-2 text-white">▶</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
