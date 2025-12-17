@@ -245,13 +245,32 @@
 		}
 	}
 
-	async function fetchAlbumMedia(albumId: string) {
+	// Album Media Pagination
+	let albumOffset = $state(0);
+	const ALBUM_LIMIT = 50;
+	let albumHasMore = $state(true);
+
+	async function fetchAlbumMedia(albumId: string, reset = false) {
 		loadingAlbumMedia = true;
-		albumMedia = [];
+		if (reset) {
+			albumMedia = [];
+			albumOffset = 0;
+			albumHasMore = true;
+		}
+
 		try {
-			// Default limit 50 for now, could implement scrolling pagination later
-			const media = await apiRequest('GET', `/albums/${albumId}/media?limit=50`);
-			albumMedia = media || [];
+			const media = await apiRequest(
+				'GET',
+				`/albums/${albumId}/media?limit=${ALBUM_LIMIT}&offset=${albumOffset}`
+			);
+
+			if (media && media.length > 0) {
+				albumMedia = [...albumMedia, ...media];
+				albumOffset += media.length;
+				if (media.length < ALBUM_LIMIT) albumHasMore = false;
+			} else {
+				albumHasMore = false;
+			}
 		} catch (err) {
 			console.error('Failed to fetch album media', err);
 		} finally {
@@ -259,9 +278,26 @@
 		}
 	}
 
+	let albumSentinel = $state<HTMLElement>();
+
+	$effect(() => {
+		if (selectedAlbum && albumSentinel && albumHasMore && !loadingAlbumMedia) {
+			const observer = new IntersectionObserver(
+				(entries) => {
+					if (entries[0].isIntersecting && albumHasMore && !loadingAlbumMedia) {
+						fetchAlbumMedia(selectedAlbum.id);
+					}
+				},
+				{ threshold: 0.1, rootMargin: '100px' }
+			);
+			observer.observe(albumSentinel);
+			return () => observer.disconnect();
+		}
+	});
+
 	function openAlbum(album: any) {
 		selectedAlbum = album;
-		fetchAlbumMedia(album.id);
+		fetchAlbumMedia(album.id, true);
 	}
 
 	async function fetchUserVideos(id: string) {
@@ -320,9 +356,12 @@
 		posts = [event.detail, ...posts];
 	}
 
-	function openMediaViewer(items: any[], index: number) {
+	let mediaViewerOnReachEnd = $state<(() => void) | undefined>(undefined);
+
+	function openMediaViewer(items: any[], index: number, onReachEnd?: () => void) {
 		mediaViewerItems = items;
 		mediaViewerIndex = index;
+		mediaViewerOnReachEnd = onReachEnd;
 		mediaViewerOpen = true;
 	}
 
@@ -345,7 +384,7 @@
 			});
 
 			// Refresh album media
-			await fetchAlbumMedia(selectedAlbum.id);
+			await fetchAlbumMedia(selectedAlbum.id, true);
 
 			// Optimistically update cover if empty
 			if (!selectedAlbum.cover_url && mediaPayload.length > 0) {
@@ -378,6 +417,7 @@
 		media={mediaViewerItems}
 		initialIndex={mediaViewerIndex}
 		onClose={() => (mediaViewerOpen = false)}
+		onReachEnd={mediaViewerOnReachEnd}
 	/>
 
 	<!-- Create Album Dialog -->
@@ -834,7 +874,12 @@
 							{#each albumMedia as item, i}
 								<div
 									class="group relative aspect-square cursor-pointer overflow-hidden rounded-lg bg-black"
-									onclick={() => openMediaViewer(albumMedia, i)}
+									onclick={() =>
+										openMediaViewer(albumMedia, i, async () => {
+											if (!selectedAlbum) return;
+											await fetchAlbumMedia(selectedAlbum.id);
+											mediaViewerItems = albumMedia;
+										})}
 								>
 									{#if item.type === 'image'}
 										<img

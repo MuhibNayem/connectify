@@ -17,8 +17,12 @@
 	let media = $state<any[]>([]);
 	let loading = $state(false);
 	let selectedIds = $state<Set<string>>(new Set());
+	const LIMIT = 50;
+	let offset = $state(0);
+	let hasMore = $state(true);
 
-	async function fetchTimelineMedia() {
+	async function fetchTimelineMedia(reset = false) {
+		if (loading) return;
 		loading = true;
 		try {
 			// 1. Get user albums to find 'timeline' album
@@ -26,11 +30,25 @@
 			const timelineAlbum = albums.find((a: any) => a.type === 'timeline');
 
 			if (timelineAlbum) {
-				// 2. Fetch media from timeline album
-				// Fetch a decent amount, e.g. 100 recent photos
-				const items = await apiRequest('GET', `/albums/${timelineAlbum.id}/media?limit=100`);
-				// Filter for images only as requested by user
-				media = (items || []).filter((item: any) => item.type === 'image');
+				if (reset) {
+					media = [];
+					offset = 0;
+					hasMore = true;
+				}
+
+				// 2. Fetch media from timeline album, filtered by type=image
+				const items = await apiRequest(
+					'GET',
+					`/albums/${timelineAlbum.id}/media?limit=${LIMIT}&offset=${offset}&type=image`
+				);
+
+				if (items && items.length > 0) {
+					media = [...media, ...items];
+					offset += items.length;
+					if (items.length < LIMIT) hasMore = false;
+				} else {
+					hasMore = false;
+				}
 			}
 		} catch (err) {
 			console.error('Failed to fetch timeline media', err);
@@ -58,7 +76,7 @@
 
 	$effect(() => {
 		if (open && userId) {
-			fetchTimelineMedia();
+			fetchTimelineMedia(true);
 			selectedIds = new Set();
 		}
 	});
@@ -73,13 +91,7 @@
 		</Dialog.Header>
 
 		<div class="h-[60vh] overflow-y-auto p-1">
-			{#if loading}
-				<div class="flex h-full items-center justify-center">
-					<div
-						class="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
-					></div>
-				</div>
-			{:else if media.length === 0}
+			{#if media.length === 0 && !loading}
 				<div class="text-muted-foreground flex h-full items-center justify-center">
 					No photos found in your timeline.
 				</div>
@@ -115,6 +127,20 @@
 						</button>
 					{/each}
 				</div>
+
+				{#if loading}
+					<div class="flex justify-center py-4">
+						<div
+							class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
+						></div>
+					</div>
+				{:else if hasMore}
+					<div class="flex justify-center py-4">
+						<Button variant="outline" size="sm" onclick={() => fetchTimelineMedia()}
+							>Load More</Button
+						>
+					</div>
+				{/if}
 			{/if}
 		</div>
 

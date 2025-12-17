@@ -13,12 +13,14 @@
 		open = false,
 		media = [],
 		initialIndex = 0,
-		onClose
+		onClose,
+		onReachEnd
 	} = $props<{
 		open: boolean;
 		media: MediaItem[];
 		initialIndex?: number;
 		onClose: () => void;
+		onReachEnd?: () => void;
 	}>();
 
 	let currentIndex = $state(initialIndex);
@@ -52,9 +54,14 @@
 
 	function next() {
 		currentIndex = (currentIndex + 1) % media.length;
+		// Pre-load more when we get close to the end (5 items remaining)
+		if (currentIndex >= media.length - 5 && onReachEnd) {
+			onReachEnd();
+		}
 	}
 
 	function prev() {
+		// Prevent wrapping to end if we want strict pagination, but for now standard wrapping is fine
 		currentIndex = (currentIndex - 1 + media.length) % media.length;
 	}
 
