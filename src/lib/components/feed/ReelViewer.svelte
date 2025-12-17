@@ -451,6 +451,10 @@
 	}
 
 	async function incrementView(reelID: string) {
+		const reel = reels.find((r) => r.id === reelID);
+		if (!reel || !currentUser) return;
+		if (reel.user_id === currentUser.id || reel.author?.id === currentUser.id) return;
+
 		try {
 			await apiRequest('POST', `/reels/${reelID}/view`, {}, true);
 		} catch (e) {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
-	import { apiRequest } from '$lib/api';
+	import { apiRequest, updatePost } from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { onMount, createEventDispatcher } from 'svelte';
 	import { formatDistanceToNow } from 'date-fns';
@@ -63,6 +63,11 @@
 	let userReactionId: string | null = null;
 	let userReactionType: string | null = null;
 	$: isLikedByCurrentUser = userReactionId !== null;
+
+	// Edit mode state
+	let isEditing = false;
+	let editedContent = '';
+	let isSaving = false;
 
 	onMount(() => {
 		(async () => {
@@ -185,6 +190,32 @@
 		}
 	}
 
+	function startEditing() {
+		isEditing = true;
+		editedContent = post.content || '';
+	}
+
+	async function saveEdit() {
+		if (!editedContent.trim()) return;
+		isSaving = true;
+		try {
+			const updated = await updatePost(safePost.id, { content: editedContent });
+			post.content = updated.content;
+			post.updated_at = updated.updated_at;
+			isEditing = false;
+		} catch (err) {
+			console.error('Failed to update post:', err);
+			alert('Failed to update post');
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	function cancelEdit() {
+		isEditing = false;
+		editedContent = '';
+	}
+
 	function handleDelete() {
 		if (!confirm('Are you sure you want to delete this post?')) return;
 
@@ -272,12 +303,10 @@
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
-								<DropdownMenuItem onclick={() => alert('Edit not implemented yet')}
-									>Example Edit</DropdownMenuItem
-								>
-								<DropdownMenuItem class="text-red-500" onclick={handleDelete}
-									>Delete</DropdownMenuItem
-								>
+								<DropdownMenuItem onclick={startEditing}>Edit</DropdownMenuItem>
+								<DropdownMenuItem onclick={handleDelete}>
+									<span class="text-destructive">Delete</span>
+								</DropdownMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenuRoot>
 					{/if}
@@ -286,15 +315,34 @@
 		</div>
 
 		<div class="text-foreground/90 leading-relaxed">
-			{#if !isDetailedView && safePost.content.length > 200}
-				<p>
-					{@html parseContent(safePost.content.slice(0, 200))}...
-					<button class="text-primary font-semibold hover:underline" onclick={handleNavigate}>
-						See more
-					</button>
-				</p>
+			{#if isEditing}
+				<textarea
+					bind:value={editedContent}
+					class="border-border bg-background focus:ring-primary min-h-[100px] w-full resize-none rounded-lg border p-3 focus:outline-none focus:ring-2"
+					placeholder="What's on your mind?"
+				></textarea>
+				<div class="mt-2 flex gap-2">
+					<Button size="sm" onclick={saveEdit} disabled={isSaving || !editedContent.trim()}>
+						{isSaving ? 'Saving...' : 'Save'}
+					</Button>
+					<Button size="sm" variant="outline" onclick={cancelEdit} disabled={isSaving}>
+						Cancel
+					</Button>
+				</div>
 			{:else}
-				<p>{@html parseContent(safePost.content)}</p>
+				{#if !isDetailedView && safePost.content.length > 200}
+					<p>
+						{@html parseContent(safePost.content.slice(0, 200))}...
+						<button class="text-primary font-semibold hover:underline" onclick={handleNavigate}>
+							See more
+						</button>
+					</p>
+				{:else}
+					<p>{@html parseContent(safePost.content)}</p>
+				{/if}
+				{#if post.created_at !== post.updated_at}
+					<span class="text-muted-foreground text-xs italic">• Edited</span>
+				{/if}
 			{/if}
 		</div>
 

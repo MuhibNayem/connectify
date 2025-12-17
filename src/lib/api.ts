@@ -456,6 +456,10 @@ export async function register(userData: any): Promise<any> {
 	return apiRequest('POST', '/auth/register', userData, false);
 }
 
+export async function updatePost(postId: string, data: any): Promise<any> {
+	return apiRequest('PUT', `/posts/${postId}`, data, true);
+}
+
 // Note: updateUserProfile returns the updated user object
 export async function updateUserProfile(data: any): Promise<import('$lib/types').User> {
 	return apiRequest('PUT', '/users/me', data, true);
