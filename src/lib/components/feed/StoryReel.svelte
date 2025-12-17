@@ -13,10 +13,13 @@
 	import { uploadFiles } from '$lib/api';
 	import StoryComposer from './StoryComposer.svelte';
 	import StoryViewer from './StoryViewer.svelte';
+	import ReelViewer from './ReelViewer.svelte';
 
 	let fileInput: HTMLInputElement;
 	let showViewer = $state(false);
+	let showReelViewer = $state(false);
 	let viewingGroupIndex = $state(0);
+	let viewingReelIndex = $state(0);
 	// Grouped stories for the viewer: array of { user: Author, stories: Story[] }
 	let storyGroups = $state<any[]>([]);
 
@@ -67,6 +70,11 @@
 	function openViewer(index: number) {
 		viewingGroupIndex = index;
 		showViewer = true;
+	}
+
+	function openReelViewer(index: number) {
+		viewingReelIndex = index;
+		showReelViewer = true;
 	}
 
 	// Privacy State (Def. to Friends, user changes in composer)
@@ -129,18 +137,76 @@
 		}
 	}
 
+	async function generateThumbnail(videoFile: File): Promise<File> {
+		return new Promise((resolve, reject) => {
+			const video = document.createElement('video');
+			video.preload = 'metadata';
+			video.src = URL.createObjectURL(videoFile);
+			video.muted = true;
+			video.playsInline = true;
+			video.currentTime = 0.5; // Capture frame at 0.5s
+
+			video.onloadeddata = () => {
+				// Wait for seek
+			};
+
+			video.onseeked = () => {
+				const canvas = document.createElement('canvas');
+				canvas.width = video.videoWidth;
+				canvas.height = video.videoHeight;
+				const ctx = canvas.getContext('2d');
+				if (!ctx) {
+					reject(new Error('Failed to get canvas context'));
+					return;
+				}
+				ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+				canvas.toBlob(
+					(blob) => {
+						if (blob) {
+							const file = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
+							resolve(file);
+						} else {
+							reject(new Error('Failed to create blob'));
+						}
+						URL.revokeObjectURL(video.src);
+					},
+					'image/jpeg',
+					0.8
+				);
+			};
+
+			video.onerror = (e) => {
+				reject(e);
+				URL.revokeObjectURL(video.src);
+			};
+		});
+	}
+
 	async function handlePost(privacy: string, allowed: string[], blocked: string[]) {
 		if (!selectedFile) return;
 
 		try {
-			// 1. Upload file
-			const uploaded = await uploadFiles([selectedFile]);
+			let filesToUpload = [selectedFile];
+			let thumbFile: File | null = null;
+
+			// Generate thumbnail for Reels
+			if (activeTab === 'reels') {
+				try {
+					thumbFile = await generateThumbnail(selectedFile);
+					filesToUpload.push(thumbFile);
+				} catch (e) {
+					console.error('Thumbnail generation failed, using fallback/video url', e);
+				}
+			}
+
+			// 1. Upload file(s)
+			const uploaded = await uploadFiles(filesToUpload);
 
 			if (uploaded && uploaded.length > 0) {
 				const mediaUrl = uploaded[0].url;
-				const mediaType = selectedFile.type.startsWith('video') ? 'video' : 'image';
 
 				if (activeTab === 'stories') {
+					const mediaType = selectedFile.type.startsWith('video') ? 'video' : 'image';
 					await apiRequest(
 						'POST',
 						'/stories',
@@ -155,14 +221,20 @@
 					);
 					fetchStories();
 				} else {
+					// For reels, use the second uploaded file as thumbnail if available, else fallback to video url
+					const thumbnailUrl = uploaded.length > 1 ? uploaded[1].url : mediaUrl;
+
 					await apiRequest(
 						'POST',
 						'/reels',
 						{
 							video_url: mediaUrl,
-							thumbnail_url: mediaUrl,
+							thumbnail_url: thumbnailUrl,
 							caption: 'New Reel',
-							duration: 0
+							duration: 0,
+							privacy: privacy,
+							allowed_viewers: allowed,
+							blocked_viewers: blocked
 						},
 						true
 					);
@@ -323,9 +395,13 @@
 			{/each}
 		{:else}
 			<!-- Display REELS (Flat Feed) -->
-			{#each reels as reel (reel.id)}
+			{#each reels as reel, i (reel.id)}
 				<div
-					class="glass-card group relative h-60 w-36 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl transition-transform hover:scale-[1.02]"
+					class="glass-card group relative h-48 w-32 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl transition-transform hover:scale-[1.02]"
+					onclick={() => openReelViewer(i)}
+					role="button"
+					tabindex="0"
+					onkeydown={(e) => e.key === 'Enter' && openReelViewer(i)}
 				>
 					<div class="absolute inset-0 z-10 bg-gradient-to-b from-transparent to-black/60"></div>
 					<img
@@ -351,6 +427,10 @@
 		{/if}
 	</div>
 </div>
+
+{#if showReelViewer}
+	<ReelViewer {reels} initialIndex={viewingReelIndex} onClose={() => (showReelViewer = false)} />
+{/if}
 
 <style>
 	.no-scrollbar::-webkit-scrollbar {

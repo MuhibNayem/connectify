@@ -1,8 +1,22 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { X, ChevronLeft, ChevronRight, Volume2, VolumeX } from '@lucide/svelte';
+	import {
+		X,
+		ChevronLeft,
+		ChevronRight,
+		Volume2,
+		VolumeX,
+		Heart,
+		ThumbsUp,
+		Laugh,
+		Frown,
+		Angry,
+		Eye
+	} from '@lucide/svelte';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
-	import { fade, scale } from 'svelte/transition';
+	import { fade, scale, slide } from 'svelte/transition';
+	import { apiRequest } from '$lib/api';
+	import { auth } from '$lib/stores/auth.svelte';
 
 	// Props
 	let {
@@ -23,12 +37,34 @@
 	let isMuted = $state(false);
 	let videoEl: HTMLVideoElement | undefined = $state();
 
+	// Viewers State
+	let showViewersList = $state(false);
+	let viewers = $state<any[]>([]);
+	let loadingViewers = $state(false);
+
+	// Floating emoji state
+	let floatingReactions = $state<{ id: number; emoji: string; x: number }[]>([]);
+
+	let currentUser = $derived(auth.state.user);
 	let currentGroup = $derived(storyGroups[currentGroupIndex]);
 	let currentStory = $derived(currentGroup?.stories[currentStoryIndex]);
+	let isOwnStory = $derived(
+		currentUser &&
+			currentStory &&
+			(currentStory.author?.id === currentUser.id || currentStory.user_id === currentUser.id)
+	);
 
 	let timer: any;
-	const STORY_DURATION = 5000; // 5 seconds for images
+	const STORY_DURATION = 5000;
 	const TICK_RATE = 100;
+
+	const REACTION_EMOJIS: Record<string, string> = {
+		LIKE: '❤️',
+		LOVE: '😍',
+		HAHA: '😂',
+		SAD: '😢',
+		ANGRY: '😡'
+	};
 
 	onMount(() => {
 		startTimer();
@@ -42,6 +78,90 @@
 	$effect(() => {
 		if (currentStory) {
 			resetTimer();
+			recordView(currentStory.id);
+			// Reset viewers list state
+			showViewersList = false;
+			viewers = [];
+			floatingReactions = [];
+		}
+	});
+
+	async function recordView(storyId: string) {
+		if (!currentUser || isOwnStory) return; // Don't record own views
+		try {
+			// Fire and forget view recording
+			apiRequest('POST', `/stories/${storyId}/view`, {}, true).catch(console.error);
+		} catch (e) {
+			console.error(e);
+		}
+	}
+
+	async function sendReaction(type: string) {
+		if (!currentStory) return;
+
+		const emoji = REACTION_EMOJIS[type] || '❤️';
+
+		// Spawn multiple floating emojis for "Messenger effect"
+		for (let i = 0; i < 5; i++) {
+			setTimeout(() => {
+				const id = Date.now() + Math.random();
+				const x = 50 + (Math.random() * 20 - 10); // Random X around center
+				floatingReactions = [...floatingReactions, { id, emoji, x }];
+
+				// Remove after animation
+				setTimeout(() => {
+					floatingReactions = floatingReactions.filter((r) => r.id !== id);
+				}, 1500);
+			}, i * 100);
+		}
+
+		try {
+			await apiRequest('POST', `/stories/${currentStory.id}/react`, { type }, true);
+		} catch (e) {
+			console.error('Failed to react:', e);
+		}
+	}
+
+	async function fetchViewers() {
+		if (!currentStory || !isOwnStory) return;
+
+		loadingViewers = true;
+		try {
+			const res = await apiRequest('GET', `/stories/${currentStory.id}/viewers`, undefined, true);
+			viewers = res || [];
+		} catch (e) {
+			console.error('Failed to fetch viewers:', e);
+		} finally {
+			loadingViewers = false;
+		}
+	}
+
+	function toggleViewers() {
+		showViewersList = !showViewersList;
+		if (showViewersList) {
+			isPaused = true;
+			fetchViewers();
+		} else {
+			isPaused = false;
+		}
+	}
+
+	// Add global style for animation if not present
+	$effect.root(() => {
+		if (typeof document !== 'undefined' && !document.getElementById('story-animations')) {
+			const style = document.createElement('style');
+			style.id = 'story-animations';
+			style.innerHTML = `
+                @keyframes float-up {
+                    0% { transform: translateY(0) scale(0.5); opacity: 0; }
+                    10% { opacity: 1; scale: 1.2; }
+                    100% { transform: translateY(-300px) scale(1); opacity: 0; }
+                }
+                .animate-float-up {
+                    animation: float-up 1.5s ease-out forwards;
+                }
+            `;
+			document.head.appendChild(style);
 		}
 	});
 
@@ -59,7 +179,7 @@
 	function startTimer() {
 		clearInterval(timer);
 		timer = setInterval(() => {
-			if (!isPaused) {
+			if (!isPaused && !showViewersList) {
 				progress += (TICK_RATE / STORY_DURATION) * 100;
 				if (progress >= 100) {
 					nextStory();
@@ -69,6 +189,7 @@
 	}
 
 	function nextStory() {
+		if (showViewersList) return; // Don't advance if list open
 		if (currentStoryIndex < currentGroup.stories.length - 1) {
 			currentStoryIndex++;
 		} else {
@@ -83,6 +204,7 @@
 	}
 
 	function prevStory() {
+		if (showViewersList) return;
 		if (currentStoryIndex > 0) {
 			currentStoryIndex--;
 		} else {
@@ -136,6 +258,7 @@
 	<div
 		class="relative h-full w-full overflow-hidden bg-gray-900 md:h-[85vh] md:max-w-[400px] md:rounded-xl"
 		onclick={(e) => {
+			if (showViewersList) return; // Don't navigate if list open
 			// Click left/right side logic
 			const rect = e.currentTarget.getBoundingClientRect();
 			const x = e.clientX - rect.left;
@@ -173,7 +296,6 @@
 						<span class="text-sm font-semibold text-white shadow-black drop-shadow-md"
 							>{currentGroup.user.username}</span
 						>
-						<!-- Optionally show timestamp here -->
 					</div>
 				</div>
 
@@ -222,5 +344,119 @@
 				{/if}
 			{/if}
 		</div>
+
+		<!-- Footer overlay -->
+		<div
+			class="absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent p-4 pb-8"
+		>
+			{#if isOwnStory}
+				<!-- Viewers Button (Author View) -->
+				<button
+					class="mb-2 flex items-center gap-2 rounded-full px-3 py-2 text-white transition-colors hover:bg-white/10"
+					onclick={(e) => {
+						e.stopPropagation();
+						toggleViewers();
+					}}
+				>
+					<Eye size={20} />
+					<span class="font-semibold">{currentStory?.viewers?.length || 0} Viewers</span>
+				</button>
+			{:else}
+				<!-- Reaction Bar (Viewer View) -->
+				<div class="flex items-center gap-4">
+					<!-- Helper to prevent bubble -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="flex gap-2 rounded-full border border-white/10 bg-black/40 p-2 px-4 backdrop-blur-md"
+						onclick={(e) => e.stopPropagation()}
+					>
+						{#each ['LIKE', 'LOVE', 'HAHA', 'SAD', 'ANGRY'] as type}
+							<button
+								class="text-2xl transition-transform hover:scale-125 active:scale-95"
+								onclick={() => sendReaction(type)}
+							>
+								{#if type === 'LIKE'}
+									❤️
+								{:else if type === 'LOVE'}
+									😍
+								{:else if type === 'HAHA'}
+									😂
+								{:else if type === 'SAD'}
+									😢
+								{:else if type === 'ANGRY'}
+									😡
+								{/if}
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Floating Reactions Container -->
+		<!-- Pointer events none so clicks pass through -->
+		<div class="pointer-events-none absolute inset-0 z-40 overflow-hidden">
+			{#each floatingReactions as reaction (reaction.id)}
+				<div
+					class="animate-float-up absolute text-4xl"
+					style="left: {reaction.x}%; bottom: 100px;"
+					transition:fade={{ duration: 1000 }}
+				>
+					{reaction.emoji}
+				</div>
+			{/each}
+		</div>
+
+		<!-- Viewers List Sheet -->
+		{#if showViewersList}
+			<div
+				class="absolute inset-x-0 bottom-0 top-20 z-50 flex flex-col rounded-t-2xl border-t border-white/10 bg-black/90 p-4 backdrop-blur-xl"
+				transition:slide={{ axis: 'y', duration: 300 }}
+				onclick={(e) => e.stopPropagation()}
+			>
+				<div class="mb-4 flex items-center justify-between border-b border-white/10 pb-2">
+					<h3 class="text-lg font-semibold text-white">Viewers ({viewers.length})</h3>
+					<button onclick={toggleViewers} class="text-white/70 hover:text-white">
+						<X size={20} />
+					</button>
+				</div>
+
+				<div class="flex-1 space-y-3 overflow-y-auto">
+					{#if loadingViewers}
+						<div class="py-4 text-center text-white/50">Loading...</div>
+					{:else if viewers.length === 0}
+						<div class="py-4 text-center text-white/50">No views yet.</div>
+					{:else}
+						{#each viewers as viewer}
+							<div class="flex items-center justify-between">
+								<div class="flex items-center gap-3">
+									<Avatar class="h-10 w-10">
+										<AvatarImage src={viewer.user.avatar} />
+										<AvatarFallback>{viewer.user.username?.[0]}</AvatarFallback>
+									</Avatar>
+									<div class="font-medium text-white">{viewer.user.username}</div>
+								</div>
+								{#if viewer.reaction_type}
+									<div class="text-2xl">
+										{#if viewer.reaction_type === 'LIKE'}
+											❤️
+										{:else if viewer.reaction_type === 'LOVE'}
+											😍
+										{:else if viewer.reaction_type === 'HAHA'}
+											😂
+										{:else if viewer.reaction_type === 'SAD'}
+											😢
+										{:else if viewer.reaction_type === 'ANGRY'}
+											😡
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/each}
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</div>
 </div>
