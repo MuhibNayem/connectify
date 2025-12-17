@@ -23,18 +23,52 @@
 	// Grouped stories for the viewer: array of { user: Author, stories: Story[] }
 	let storyGroups = $state<any[]>([]);
 
+	// Pagination State
+	let storiesOffset = $state(0);
+	let storiesLimit = 10;
+	let hasMoreStories = $state(true);
+	let isLoadingStories = $state(false);
+
 	// Composer State
 	let showComposer = $state(false);
 	let selectedFile = $state<File | null>(null);
 
 	async function fetchStories() {
+		if (isLoadingStories || !hasMoreStories) return;
+		isLoadingStories = true;
+
 		try {
-			// In a real app, this endpoint would return friends' active stories
-			const res = await apiRequest('GET', '/stories', undefined, true);
+			// Fetch friends' active stories with pagination
+			const res = await apiRequest(
+				'GET',
+				`/stories?limit=${storiesLimit}&offset=${storiesOffset}`,
+				undefined,
+				true
+			);
 			const rawStories = res || [];
+
+			if (rawStories.length < storiesLimit) {
+				hasMoreStories = false; // No more stories from server?
+				// Note: Since we paginate AUTHORS, not stories, this check might be tricky if backend returns flat list of stories.
+				// But backend aggregates authors. So if we requested 10 authors, and got stories for 10 authors...
+				// Actually, GetStoriesFeed returns a FLAT LIST of models.Story.
+				// If we have < limit*N stories, we don't know if we exhausted authors.
+				// WAIT: If Backend returns stories for X authors. We don't know how many authors unless we check unique user_ids.
+				// BUT: The backend logic creates userIDs list from friends. Then paginates authors.
+				// So if we get 0 stories, likely no more authors with stories.
+				// Let's assume if rawStories is empty, we are done.
+			}
+			if (rawStories.length === 0) {
+				hasMoreStories = false;
+			}
 
 			// Group by user
 			const groups: Record<string, any> = {};
+
+			// We need to merge with existing groups if we already have them, OR just append new groups?
+			// Since we paginate authors, new fetch should return NEW authors.
+			// So strict append should work.
+
 			rawStories.forEach((story: any) => {
 				const userId = story.author?.id || story.user_id;
 				if (!groups[userId]) {
@@ -46,10 +80,20 @@
 				groups[userId].stories.push(story);
 			});
 
-			storyGroups = Object.values(groups);
-			stories = rawStories; // Keep raw for reference if needed, but UI uses groups
+			const newGroups = Object.values(groups);
+			storyGroups = [...storyGroups, ...newGroups];
+			stories = [...stories, ...rawStories];
+
+			// Increment offset for next fetch
+			// Offset should be number of AUTHORS fetched? Or simple skip?
+			// Backend `GetActiveStoryAuthors` takes `limit, offset`.
+			// So we should increment offset by `storiesLimit`.
+			storiesOffset += storiesLimit;
 		} catch (error) {
 			console.error('Failed to fetch stories:', error);
+			hasMoreStories = false;
+		} finally {
+			isLoadingStories = false;
 		}
 	}
 
@@ -219,6 +263,11 @@
 						},
 						true
 					);
+					// Reset pagination and reload
+					storiesOffset = 0;
+					storyGroups = [];
+					stories = [];
+					hasMoreStories = true;
 					fetchStories();
 				} else {
 					// For reels, use the second uploaded file as thumbnail if available, else fallback to video url
@@ -319,7 +368,21 @@
 		</button>
 	</div>
 
-	<div class="no-scrollbar flex space-x-2 overflow-x-auto pb-2">
+	<div
+		class="no-scrollbar flex space-x-2 overflow-x-auto pb-2"
+		onscroll={(e) => {
+			const target = e.target as HTMLDivElement;
+			// Check if scrolled near end horizontal
+			if (
+				target.scrollWidth - target.scrollLeft - target.clientWidth < 200 &&
+				activeTab === 'stories' &&
+				hasMoreStories &&
+				!isLoadingStories
+			) {
+				fetchStories();
+			}
+		}}
+	>
 		<!-- Create Card -->
 		<div
 			class="glass-card group relative h-48 w-32 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl transition-transform hover:scale-[1.02]"
