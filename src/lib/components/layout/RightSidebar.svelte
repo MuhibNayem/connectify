@@ -1,44 +1,66 @@
 <script lang="ts">
-    // Assuming you have icons like User, Phone, Video, MoreHorizontal from Lucide Svelte
-    // import { User, Phone, Video, MoreHorizontal } from 'lucide-svelte';
+	// Assuming you have icons like User, Phone, Video, MoreHorizontal from Lucide Svelte
+	// import { User, Phone, Video, MoreHorizontal } from 'lucide-svelte';
 </script>
 
 <div class="space-y-6">
-    <!-- Contacts/Friends Online -->
-    <div>
-        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-3">Contacts</h3>
-        <div class="space-y-2">
-            <!-- Example Contact -->
-            <a href="/profile/friend1" class="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <div class="relative">
-                    <div class="w-8 h-8 bg-green-300 rounded-full flex items-center justify-center text-green-600 font-bold">F1</div>
-                    <span class="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"></span>
-                </div>
-                <span class="text-gray-800 font-medium">Friend One</span>
-            </a>
-            <a href="/profile/friend2" class="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <div class="relative">
-                    <div class="w-8 h-8 bg-blue-300 rounded-full flex items-center justify-center text-blue-600 font-bold">F2</div>
-                    <span class="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"></span>
-                </div>
-                <span class="text-gray-800 font-medium">Friend Two</span>
-            </a>
-            <!-- Add more contacts -->
-        </div>
-    </div>
+	<!-- Contacts/Friends Online -->
+	<div>
+		<h3 class="text-muted-foreground mb-3 text-xs font-semibold uppercase">Contacts</h3>
+		<div class="space-y-2">
+			<!-- Example Contact -->
+			<a
+				href="/profile/friend1"
+				class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-white/10"
+			>
+				<div class="relative">
+					<div
+						class="flex h-8 w-8 items-center justify-center rounded-full bg-green-300 font-bold text-green-600"
+					>
+						F1
+					</div>
+					<span
+						class="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
+					></span>
+				</div>
+				<span class="text-foreground font-medium">Friend One</span>
+			</a>
+			<a
+				href="/profile/friend2"
+				class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-white/10"
+			>
+				<div class="relative">
+					<div
+						class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-300 font-bold text-blue-600"
+					>
+						F2
+					</div>
+					<span
+						class="absolute bottom-0 right-0 block h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
+					></span>
+				</div>
+				<span class="text-foreground font-medium">Friend Two</span>
+			</a>
+			<!-- Add more contacts -->
+		</div>
+	</div>
 
-    <!-- Separator -->
-    <hr class="border-gray-200" />
+	<!-- Separator -->
+	<hr class="border-white/10" />
 
-    <!-- Sponsored/Suggested Content (Placeholder) -->
-    <div>
-        <h3 class="text-xs font-semibold text-gray-500 uppercase mb-3">Sponsored</h3>
-        <div class="space-y-3">
-            <div class="bg-gray-50 p-3 rounded-lg shadow-sm">
-                <p class="text-sm font-medium text-gray-800">Discover New Features!</p>
-                <p class="text-xs text-gray-600 mt-1">Explore the latest updates on Connectify.</p>
-                <img src="https://via.placeholder.com/200x100" alt="Sponsored Content" class="mt-2 rounded-md" />
-            </div>
-        </div>
-    </div>
+	<!-- Sponsored/Suggested Content (Placeholder) -->
+	<div>
+		<h3 class="text-muted-foreground mb-3 text-xs font-semibold uppercase">Sponsored</h3>
+		<div class="space-y-3">
+			<div class="glass-card rounded-lg p-3">
+				<p class="text-foreground text-sm font-medium">Discover New Features!</p>
+				<p class="text-muted-foreground mt-1 text-xs">Explore the latest updates on Connectify.</p>
+				<img
+					src="https://via.placeholder.com/200x100"
+					alt="Sponsored Content"
+					class="mt-2 rounded-md"
+				/>
+			</div>
+		</div>
+	</div>
 </div>

@@ -51,20 +51,24 @@
 </script>
 
 <header
-	class="fixed left-0 right-0 top-0 z-50 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-md"
+	class="glass-panel fixed left-0 right-0 top-0 z-50 flex h-14 items-center justify-between border-b-0 px-4"
 >
 	<div class="flex items-center space-x-4">
 		<Button
 			variant="ghost"
 			size="icon"
-			class="rounded-full hover:bg-gray-100 md:hidden"
+			class="rounded-full hover:bg-white/20 md:hidden"
 			onclick={toggleMobileMenu}
 		>
 			<span class="text-2xl">☰</span>
 		</Button>
-		<a href="/dashboard" class="text-2xl font-bold text-indigo-600">Connectify</a>
+		<a
+			href="/dashboard"
+			class="from-primary to-accent bg-gradient-to-r bg-clip-text text-2xl font-bold text-transparent"
+			>Connectify</a
+		>
 		<div class="relative hidden max-w-md flex-grow md:block">
-			<SearchInput on:search={handleSearchSubmit} />
+			<SearchInput on:search={handleSearchSubmit} class="glass-input" />
 		</div>
 	</div>
 
@@ -72,7 +76,7 @@
 		<Button
 			variant="ghost"
 			size="icon"
-			class="rounded-full hover:bg-gray-100"
+			class="rounded-full hover:bg-white/20"
 			onclick={() => goto('/dashboard')}
 		>
 			<span class="text-2xl">🏠</span>
@@ -80,7 +84,7 @@
 		<Button
 			variant="ghost"
 			size="icon"
-			class="rounded-full hover:bg-gray-100"
+			class="rounded-full hover:bg-white/20"
 			onclick={() => goto('/friends')}
 		>
 			<span class="text-2xl">👥</span>
@@ -88,7 +92,7 @@
 		<Button
 			variant="ghost"
 			size="icon"
-			class="rounded-full hover:bg-gray-100"
+			class="rounded-full hover:bg-white/20"
 			onclick={() => goto('/messages')}
 		>
 			<span class="text-2xl">💬</span>
@@ -98,13 +102,13 @@
 				<Button
 					variant="ghost"
 					size="icon"
-					class="rounded-full hover:bg-gray-100"
+					class="rounded-full hover:bg-white/20"
 					onclick={toggleNotifications}
 				>
 					<span class="text-2xl">🔔</span>
 					{#if $notifications.unreadCount > 0}
 						<span
-							class="absolute right-0 top-0 inline-flex -translate-y-1/2 translate-x-1/2 transform items-center justify-center rounded-full bg-red-600 px-2 py-1 text-xs font-bold leading-none text-red-100"
+							class="absolute right-0 top-0 inline-flex -translate-y-1/2 translate-x-1/2 transform items-center justify-center rounded-full bg-red-500/90 px-2 py-1 text-xs font-bold leading-none text-white shadow-sm"
 						>
 							{$notifications.unreadCount}
 						</span>
@@ -114,7 +118,7 @@
 			{#if showNotifications}
 				<div
 					bind:this={notificationList}
-					class="absolute right-0 z-50 mt-2 w-80 rounded-md bg-white shadow-lg"
+					class="glass-card absolute right-0 z-50 mt-2 w-80 overflow-hidden"
 				>
 					<NotificationList />
 				</div>
@@ -126,38 +130,42 @@
 		<Button
 			variant="ghost"
 			size="icon"
-			class="rounded-full hover:bg-gray-100"
+			class="rounded-full hover:bg-white/20"
 			onclick={() => goto(`/profile/${auth.state.user?.id}`)}
 		>
 			<span class="text-2xl">👤</span>
 		</Button>
-		<Button variant="ghost" class="hidden sm:block" onclick={handleLogout}>Logout</Button>
+		<Button variant="ghost" class="hidden hover:bg-white/20 sm:block" onclick={handleLogout}
+			>Logout</Button
+		>
 	</div>
 
 	{#if mobileMenuOpen}
-		<div class="fixed bottom-0 left-0 right-0 top-14 z-40 bg-white p-4 md:hidden">
+		<div class="glass-panel fixed bottom-0 left-0 right-0 top-14 z-40 p-4 md:hidden">
 			<nav class="flex flex-col space-y-4">
 				<a
 					href="/dashboard"
-					class="text-lg font-medium text-gray-700 hover:text-indigo-600"
+					class="text-foreground hover:text-primary text-lg font-medium"
 					on:click={() => (mobileMenuOpen = false)}>Dashboard</a
 				>
 				<a
 					href="/friends"
-					class="text-lg font-medium text-gray-700 hover:text-indigo-600"
+					class="text-foreground hover:text-primary text-lg font-medium"
 					on:click={() => (mobileMenuOpen = false)}>Friends</a
 				>
 				<a
 					href="/messages"
-					class="text-lg font-medium text-gray-700 hover:text-indigo-600"
+					class="text-foreground hover:text-primary text-lg font-medium"
 					on:click={() => (mobileMenuOpen = false)}>Messages</a
 				>
 				<a
 					href="/profile/{auth.state.user?.id}"
-					class="text-lg font-medium text-gray-700 hover:text-indigo-600"
+					class="text-foreground hover:text-primary text-lg font-medium"
 					on:click={() => (mobileMenuOpen = false)}>Profile</a
 				>
-				<Button variant="ghost" class="w-full" onclick={handleLogout}>Logout</Button>
+				<Button variant="ghost" class="w-full hover:bg-white/20" onclick={handleLogout}
+					>Logout</Button
+				>
 			</nav>
 		</div>
 	{/if}

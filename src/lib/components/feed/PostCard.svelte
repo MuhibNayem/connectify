@@ -176,7 +176,7 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-2xl space-y-3 rounded-lg bg-white p-4 shadow-md">
+<div class="glass-card mx-auto w-full max-w-2xl space-y-3 p-4">
 	<div class="flex items-center space-x-3">
 		<Avatar class="h-10 w-10">
 			<AvatarImage
@@ -187,37 +187,37 @@
 		</Avatar>
 		<div>
 			<div class="flex items-center space-x-1">
-				<p class="font-semibold text-gray-900 dark:text-white">
+				<p class="text-foreground font-semibold">
 					{post.author.username}
 				</p>
 				{#if post.mentioned_users && post.mentioned_users.length > 0}
-					<span class="font-normal text-gray-500 dark:text-gray-400">with</span>
-					<span class="font-medium text-gray-900 dark:text-white">
+					<span class="text-muted-foreground font-normal">with</span>
+					<span class="text-foreground font-medium">
 						{post.mentioned_users.length} people
 					</span>
 				{:else if post.mentions && post.mentions.length > 0}
-					<span class="font-normal text-gray-500 dark:text-gray-400">with</span>
-					<span class="font-medium text-gray-900 dark:text-white">
+					<span class="text-muted-foreground font-normal">with</span>
+					<span class="text-foreground font-medium">
 						{post.mentions.length} people
 					</span>
 				{/if}
 				{#if post.location}
-					<span class="font-normal text-gray-500 dark:text-gray-400">is at</span>
-					<span class="font-medium text-gray-900 dark:text-white">{post.location}</span>
+					<span class="text-muted-foreground font-normal">is at</span>
+					<span class="text-foreground font-medium">{post.location}</span>
 				{/if}
 			</div>
-			<p class="text-xs text-gray-500">
+			<p class="text-muted-foreground text-xs">
 				{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })} •
 				<span class="capitalize">{post.privacy.replace('_', ' ').toLowerCase()}</span>
 			</p>
 		</div>
 	</div>
 
-	<div class="leading-relaxed text-gray-800">
+	<div class="text-foreground/90 leading-relaxed">
 		{#if !isDetailedView && post.content.length > 200}
 			<p>
 				{@html parseContent(post.content.slice(0, 200))}...
-				<button class="font-semibold text-blue-600 hover:underline" onclick={handleNavigate}>
+				<button class="text-primary font-semibold hover:underline" onclick={handleNavigate}>
 					See more
 				</button>
 			</p>
@@ -230,7 +230,7 @@
 		{#if isDetailedView}
 			<div class="mt-3 space-y-4">
 				{#each post.media as item}
-					<div class="w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-900">
+					<div class="w-full overflow-hidden rounded-lg bg-black/5">
 						{#if item.type === 'image' || item.type?.startsWith('image')}
 							<img src={item.url} alt="Post media" class="w-full object-contain" />
 						{:else if item.type === 'video' || item.type?.startsWith('video')}
@@ -259,7 +259,7 @@
 					{@const isOverlayNeeded = mediaCount > 4 && isLastItem}
 
 					<div
-						class={`relative cursor-pointer overflow-hidden bg-gray-100 dark:bg-gray-900 ${
+						class={`relative cursor-pointer overflow-hidden bg-black/5 ${
 							mediaCount === 3 && i === 0 ? 'col-span-2 row-span-1' : ''
 						} ${
 							/* Image/Video sizing */
@@ -294,7 +294,7 @@
 	{/if}
 
 	<div
-		class="flex items-center justify-between border-b border-gray-200 pb-2 text-sm text-gray-600"
+		class="text-muted-foreground flex items-center justify-between border-b border-white/10 pb-2 text-sm"
 	>
 		<span>{post.total_reactions || 0} Likes</span>
 		<span>{post.total_comments || 0} Comments</span>
@@ -304,8 +304,8 @@
 		<Button
 			variant="ghost"
 			class="flex items-center space-x-1 {isLikedByCurrentUser
-				? 'text-blue-600'
-				: 'text-gray-600'} hover:text-blue-600"
+				? 'text-primary'
+				: 'text-muted-foreground'} hover:text-primary hover:bg-white/10"
 			onclick={handleLike}
 		>
 			<span class="text-xl">👍</span>
@@ -313,7 +313,7 @@
 		</Button>
 		<Button
 			variant="ghost"
-			class="flex items-center space-x-1 text-gray-600 hover:text-indigo-600"
+			class="text-muted-foreground hover:text-primary flex items-center space-x-1 hover:bg-white/10"
 			onclick={handleComment}
 		>
 			<span class="text-xl">💬</span>
@@ -321,7 +321,7 @@
 		</Button>
 		<Button
 			variant="ghost"
-			class="flex items-center space-x-1 text-gray-600 hover:text-indigo-600"
+			class="text-muted-foreground hover:text-primary flex items-center space-x-1 hover:bg-white/10"
 			onclick={handleShare}
 		>
 			<span class="text-xl">🔗</span>

@@ -221,13 +221,11 @@
 
 <svelte:window on:click={handleWindowClick} />
 
-<Card
-	class="relative w-full overflow-visible rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
->
+<Card class="glass-card relative w-full overflow-visible border-0">
 	<CardContent class="space-y-4 p-4">
 		<!-- Input Area -->
 		<div class="flex items-start space-x-3">
-			<div class="h-10 w-10 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700"></div>
+			<div class="h-10 w-10 flex-shrink-0 rounded-full bg-black/10"></div>
 			<div class="flex-grow space-y-2">
 				<div class="relative">
 					<Textarea
@@ -236,7 +234,7 @@
 						oninput={handleTextareaInput}
 						onblur={() => setTimeout(() => (showInlineMentions = false), 150)}
 						rows={mediaItems.length > 0 ? 2 : 3}
-						class="w-full resize-none border-none bg-transparent p-0 text-lg placeholder:text-gray-500 focus-visible:ring-0"
+						class="placeholder:text-muted-foreground text-foreground w-full resize-none border-none bg-transparent p-0 text-lg focus-visible:ring-0"
 						disabled={submitting}
 					/>
 					{#if showInlineMentions}
@@ -249,7 +247,7 @@
 					{/if}
 					{#if showEmojiPicker}
 						<div
-							class="absolute right-0 top-full z-50 mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
+							class="glass-card absolute right-0 top-full z-50 mt-2 overflow-hidden rounded-lg border border-white/10"
 							bind:this={emojiPickerContainer}
 						>
 							<emoji-picker use:setupEmojiPicker class="light"></emoji-picker>
@@ -259,9 +257,9 @@
 
 				<!-- Tagged Users & Location Display -->
 				{#if taggedUsers.length > 0 || location}
-					<div class="flex flex-wrap gap-2 text-sm text-gray-600 dark:text-gray-300">
+					<div class="text-foreground/80 flex flex-wrap gap-2 text-sm">
 						{#if location}
-							<span class="flex items-center rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-700">
+							<span class="flex items-center rounded-md bg-black/5 px-2 py-1">
 								<MapPin size={14} class="mr-1 text-red-500" />
 								{location}
 								<button onclick={() => (location = '')} class="ml-2 hover:text-red-500"
@@ -271,7 +269,7 @@
 						{/if}
 						{#each taggedUsers as user}
 							<span
-								class="flex items-center rounded-md bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+								class="flex items-center rounded-md bg-blue-500/10 px-2 py-1 text-blue-600 dark:text-blue-300"
 							>
 								<span class="mr-1">@</span>{user.username}
 								<button onclick={() => removeUserTag(user.id)} class="ml-2 hover:text-blue-500"
@@ -290,7 +288,7 @@
 				<div class="flex w-max space-x-3">
 					{#each mediaItems as item, index}
 						<div
-							class="group relative aspect-square h-32 w-32 flex-shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-black shadow-sm md:h-40 md:w-40 dark:border-gray-700"
+							class="group relative aspect-square h-32 w-32 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30 md:h-40 md:w-40"
 						>
 							{#if item.type === 'image'}
 								<img src={item.previewUrl} alt="Preview" class="h-full w-full object-cover" />
@@ -307,7 +305,7 @@
 					{/each}
 					{#if mediaItems.length < 10}
 						<button
-							class="flex h-32 w-32 flex-shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:bg-gray-50 md:h-40 md:w-40 dark:border-gray-600 dark:hover:bg-gray-800/50"
+							class="text-muted-foreground flex h-32 w-32 flex-shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/20 transition-colors hover:bg-white/5 md:h-40 md:w-40"
 							onclick={() => fileInput.click()}
 						>
 							<ImageIcon size={24} class="mb-2 opacity-50" />
@@ -321,30 +319,28 @@
 		<!-- Feature Inputs (Location / User Search) -->
 		{#if showLocationInput}
 			<div
-				class="animate-in fade-in slide-in-from-top-1 flex items-center space-x-2 rounded-lg bg-gray-50 p-2 dark:bg-gray-700/50"
+				class="glass-panel animate-in fade-in slide-in-from-top-1 flex items-center space-x-2 rounded-lg p-2"
 			>
 				<MapPin size={18} class="text-red-500" />
 				<input
 					type="text"
 					placeholder="Where are you?"
 					bind:value={location}
-					class="w-full border-none bg-transparent text-sm focus:ring-0"
+					class="text-foreground w-full border-none bg-transparent text-sm focus:ring-0"
 					autoFocus
 				/>
 			</div>
 		{/if}
 
 		{#if showUserTagger}
-			<div
-				class="animate-in fade-in slide-in-from-top-1 relative rounded-lg bg-gray-50 p-2 dark:bg-gray-700/50"
-			>
+			<div class="glass-panel animate-in fade-in slide-in-from-top-1 relative rounded-lg p-2">
 				<div class="flex items-center space-x-2">
 					<UserPlus size={18} class="text-blue-500" />
 					<input
 						type="text"
 						placeholder="Search for friends to tag..."
 						bind:value={userSearchQuery}
-						class="w-full border-none bg-transparent text-sm focus:ring-0"
+						class="text-foreground w-full border-none bg-transparent text-sm focus:ring-0"
 						autoFocus
 					/>
 				</div>
@@ -356,14 +352,10 @@
 			</div>
 		{/if}
 
-		<div
-			class="flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-700"
-		>
+		<div class="flex items-center justify-between border-t border-white/10 pt-3">
 			<!-- Add to Post Actions -->
 			<div class="flex items-center space-x-2">
-				<p class="mr-2 hidden text-sm font-semibold text-gray-900 sm:block dark:text-gray-200">
-					Add to your post
-				</p>
+				<p class="text-foreground mr-2 hidden text-sm font-semibold sm:block">Add to your post</p>
 
 				<input
 					type="file"
@@ -378,7 +370,7 @@
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-green-500 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20"
+						class="rounded-full text-green-500 hover:bg-green-500/10 hover:text-green-600"
 						onclick={() => fileInput.click()}
 					>
 						<ImageIcon size={20} />
@@ -386,7 +378,7 @@
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20"
+						class="rounded-full text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
 						onclick={toggleUserTagger}
 					>
 						<Tag size={20} />
@@ -395,7 +387,7 @@
 						<Button
 							variant="ghost"
 							size="icon"
-							class="rounded-full text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600 dark:hover:bg-yellow-900/20"
+							class="rounded-full text-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-600"
 							onclick={toggleEmojiPicker}
 						>
 							<Smile size={20} />
@@ -404,7 +396,7 @@
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+						class="rounded-full text-red-500 hover:bg-red-500/10 hover:text-red-600"
 						onclick={toggleLocation}
 					>
 						<MapPin size={20} />

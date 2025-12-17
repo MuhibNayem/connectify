@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import AppHeader from '$lib/components/layout/AppHeader.svelte';
+	// AppHeader is now in +layout.svelte
 	import LeftSidebar from '$lib/components/layout/LeftSidebar.svelte';
 	import RightSidebar from '$lib/components/layout/RightSidebar.svelte';
 	import PostCreator from '$lib/components/feed/PostCreator.svelte';
@@ -78,14 +78,12 @@
 	});
 </script>
 
-<div class="flex min-h-screen flex-col bg-gray-100 font-sans">
-	<AppHeader />
-
+<div class="flex min-h-screen flex-col font-sans">
 	<div class="grid flex-1 grid-cols-[auto_1fr_auto] pt-14">
 		<!-- pt-14 to account for fixed header height -->
 		<!-- Left Sidebar -->
 		<aside
-			class="sticky top-14 hidden h-[calc(100vh-56px)] w-64 overflow-y-auto bg-white p-4 shadow-md md:block lg:w-72"
+			class="sticky top-14 hidden h-[calc(100vh-56px)] w-64 overflow-y-auto p-4 md:block lg:w-72"
 		>
 			<LeftSidebar />
 		</aside>
@@ -93,45 +91,59 @@
 		<!-- Main Content Area (News Feed) -->
 		<main class="overflow-y-auto p-4">
 			<div class="mx-auto flex max-w-2xl flex-col items-center space-y-6">
-				<PostCreator on:postCreated={handlePostCreated} />
-				{#if posts.length > 0}
-					{#each posts as post (post.id)}
-						<PostCard {post} />
-					{/each}
+				<!-- Post Creator with high z-index to prevent dropdown clipping -->
+				<div class="relative z-30 mb-6 w-full">
+					<PostCreator on:postCreated={handlePostCreated} />
+				</div>
+
+				{#if loadingPosts && posts.length === 0}
+					<div class="w-full space-y-6">
+						{#each Array(3) as _, i (i)}
+							<div class="glass-card mx-auto w-full max-w-2xl space-y-3 p-4">
+								<div class="flex items-center space-x-3">
+									<Skeleton class="h-10 w-10 rounded-full" />
+									<div class="space-y-2">
+										<Skeleton class="h-4 w-[200px]" />
+										<Skeleton class="h-4 w-[150px]" />
+									</div>
+								</div>
+								<div class="space-y-2">
+									<Skeleton class="h-4 w-full" />
+									<Skeleton class="h-4 w-[80%]" />
+								</div>
+								<div class="flex items-center justify-between pt-2">
+									<Skeleton class="h-8 w-24" />
+									<Skeleton class="h-8 w-24" />
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else if !loadingPosts && posts.length === 0 && !errorPosts}
+					<p class="glass-panel w-full rounded-lg p-4 text-center">
+						No posts to display. Be the first to post!
+					</p>
+				{:else}
+					<div class="w-full space-y-6">
+						{#each posts as post (post.id)}
+							<PostCard {post} />
+						{/each}
+					</div>
 				{/if}
 
 				{#if hasMore && !loadingPosts}
-					<div use:intersect on:intersect={loadMorePosts} class="h-10"></div>
+					<div use:intersect on:intersect={loadMorePosts} class="h-10 w-full"></div>
 				{/if}
 
-				{#if loadingPosts}
-					{#each Array(3) as _, i (i)}
-						<div class="mx-auto w-full max-w-2xl space-y-3 rounded-lg bg-white p-4 shadow-md">
-							<div class="flex items-center space-x-3">
-								<Skeleton class="h-10 w-10 rounded-full" />
-								<div class="space-y-2">
-									<Skeleton class="h-4 w-[200px]" />
-									<Skeleton class="h-4 w-[150px]" />
-								</div>
-							</div>
-							<div class="space-y-2">
-								<Skeleton class="h-4 w-full" />
-								<Skeleton class="h-4 w-[80%]" />
-							</div>
-							<div class="flex items-center justify-between pt-2">
-								<Skeleton class="h-8 w-24" />
-								<Skeleton class="h-8 w-24" />
-							</div>
-						</div>
-					{/each}
+				{#if loadingPosts && posts.length > 0}
+					<div class="flex justify-center p-4">
+						<div
+							class="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+						></div>
+					</div>
 				{/if}
 
 				{#if !hasMore && posts.length > 0}
-					<p class="text-center text-gray-500">You've reached the end!</p>
-				{/if}
-
-				{#if !loadingPosts && posts.length === 0 && !errorPosts}
-					<p>No posts to display. Be the first to post!</p>
+					<p class="text-muted-foreground text-center">You've reached the end!</p>
 				{/if}
 
 				{#if errorPosts}
@@ -141,9 +153,7 @@
 		</main>
 
 		<!-- Right Sidebar -->
-		<aside
-			class="sticky top-14 hidden h-[calc(100vh-56px)] w-72 overflow-y-auto bg-white p-4 shadow-md lg:block"
-		>
+		<aside class="sticky top-14 hidden h-[calc(100vh-56px)] w-72 overflow-y-auto p-4 lg:block">
 			<RightSidebar />
 		</aside>
 	</div>

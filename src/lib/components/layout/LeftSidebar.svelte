@@ -1,37 +1,55 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { getFriendships, type PopulatedFriendship, type FriendshipStatus } from '$lib/api';
+	import { page } from '$app/stores';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { presenceStore, type PresenceState } from '$lib/stores/presence';
+	import { getFriendships } from '$lib/api';
+	import { onMount } from 'svelte';
+	import { websocketMessages } from '$lib/websocket';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
+	import Skeleton from '$lib/components/ui/skeleton/Skeleton.svelte';
+	import { Users, Globe, Calendar, ShoppingBag, Settings, User } from '@lucide/svelte';
 
-	let friends = $state<PopulatedFriendship[]>([]);
-	let isLoading = $state(true);
+	let currentUser = $derived(auth.state.user);
+	let friends = $state<any[]>([]);
+	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let presenceState = $state<PresenceState>({});
+	let presenceState = $state<Record<string, { status: string; last_seen?: string }>>({});
 
-	const currentUser = auth.state.user;
-
-	presenceStore.subscribe((value) => {
-		presenceState = value;
-	});
-
-	onMount(async () => {
-		if (!currentUser) {
-			error = 'User not authenticated.';
-			isLoading = false;
-			return;
-		}
-
+	async function fetchFriends() {
 		try {
 			const response = await getFriendships('accepted');
-			friends = response.data;
-		} catch (e: any) {
-			error = e.message || 'Failed to load friends.';
+			friends = response.data || [];
+		} catch (err: any) {
+			error = err.message;
 		} finally {
-			isLoading = false;
+			loading = false;
+		}
+	}
+
+	$effect(() => {
+		if (currentUser) {
+			fetchFriends();
 		}
 	});
+
+	onMount(() => {
+		const unsubscribe = websocketMessages.subscribe((event) => {
+			if (event?.type === 'PresenceUpdate') {
+				const { user_id, status, last_seen } = event.data;
+				presenceState = {
+					...presenceState,
+					[user_id]: { status, last_seen }
+				};
+			}
+		});
+
+		return () => {
+			unsubscribe();
+		};
+	});
+
+	function isActive(path: string) {
+		return $page.url.pathname === path;
+	}
 </script>
 
 <div class="space-y-4">
@@ -39,70 +57,58 @@
 	{#if currentUser}
 		<a
 			href={`/profile/${currentUser.id}`}
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
+			class="text-foreground hover:bg-primary/10 flex items-center space-x-3 rounded-xl border-transparent bg-transparent p-2 transition-all hover:shadow-sm"
 		>
-			<Avatar class="h-8 w-8">
+			<Avatar class="ring-primary/20 h-8 w-8 ring-2">
 				<AvatarImage src={currentUser.avatar} alt={currentUser.username} />
 				<AvatarFallback>{currentUser.username.charAt(0).toUpperCase()}</AvatarFallback>
 			</Avatar>
-			<span class="font-medium text-gray-800">{currentUser.full_name || currentUser.username}</span>
+			<span class="font-medium">{currentUser.full_name || currentUser.username}</span>
 		</a>
 	{/if}
 
 	<!-- Main Navigation Links -->
 	<nav class="space-y-1">
-		<a
-			href="/friends"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<!-- <Users size={20} /> -->
-			<span class="text-xl">👥</span>
-			<span class="text-gray-700">Friends</span>
-		</a>
-		<a
-			href="/communities"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<span class="text-xl">🌍</span>
-			<span class="text-gray-700">Communities</span>
-		</a>
-		<a
-			href="/events"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<!-- <Calendar size={20} /> -->
-			<span class="text-xl">🗓️</span>
-			<span class="text-gray-700">Events</span>
-		</a>
-		<a
-			href="/marketplace"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<!-- <ShoppingBag size={20} /> -->
-			<span class="text-xl">🛍️</span>
-			<span class="text-gray-700">Marketplace</span>
-		</a>
-		<a
-			href="/settings"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<span class="text-xl">⚙️</span>
-			<span class="text-gray-700">Settings</span>
-		</a>
+		{#each [{ href: '/friends', label: 'Friends', icon: Users }, { href: '/communities', label: 'Communities', icon: Globe }, { href: '/events', label: 'Events', icon: Calendar }, { href: '/marketplace', label: 'Marketplace', icon: ShoppingBag }, { href: '/settings', label: 'Settings', icon: Settings }] as item}
+			<a
+				href={item.href}
+				class="hover:bg-primary/10 hover:text-primary flex items-center space-x-3 rounded-xl p-3 transition-all duration-200 hover:scale-[1.02] active:scale-95 {isActive(
+					item.href
+				)
+					? 'bg-primary/15 text-primary font-semibold shadow-sm'
+					: 'text-muted-foreground'}"
+			>
+				<svelte:component
+					this={item.icon}
+					size={22}
+					class={isActive(item.href)
+						? 'text-primary'
+						: 'text-muted-foreground group-hover:text-primary'}
+				/>
+				<span>{item.label}</span>
+			</a>
+		{/each}
 	</nav>
 
 	<!-- Separator -->
-	<hr class="border-gray-200" />
+	<hr class="border-white/10" />
 
 	<!-- Friends List -->
 	<div class="space-y-1">
-		<h3 class="px-2 text-xs font-semibold uppercase text-gray-500">Friends</h3>
-		{#if isLoading}
-			<p class="p-2 text-gray-500">Loading friends...</p>
+		<h3 class="text-muted-foreground px-2 text-xs font-semibold uppercase">Friends</h3>
+		{#if loading}
+			<div class="space-y-3 px-2">
+				{#each Array(3) as _}
+					<div class="flex items-center space-x-3">
+						<Skeleton class="bg-primary/10 h-8 w-8 rounded-full" />
+						<Skeleton class="bg-primary/10 h-4 w-24" />
+					</div>
+				{/each}
+			</div>
 		{:else if error}
 			<p class="p-2 text-red-500">{error}</p>
 		{:else if friends.length === 0}
-			<p class="p-2 text-gray-500">No friends to show.</p>
+			<p class="text-muted-foreground p-2">No friends to show.</p>
 		{:else}
 			<ul class="space-y-1">
 				{#each friends as friend (friend.id)}
@@ -112,7 +118,7 @@
 					<li>
 						<a
 							href={`/profile/${friendUser.id}`}
-							class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
+							class="hover:bg-primary/10 flex items-center space-x-3 rounded-xl p-2 transition-all"
 						>
 							<div class="relative">
 								<Avatar class="h-8 w-8">
@@ -125,7 +131,9 @@
 									></span>
 								{/if}
 							</div>
-							<span class="text-gray-700">{friendUser.full_name || friendUser.username}</span>
+							<span class="text-foreground/90 text-sm font-medium"
+								>{friendUser.full_name || friendUser.username}</span
+							>
 						</a>
 					</li>
 				{/each}

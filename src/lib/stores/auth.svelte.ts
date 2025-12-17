@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
-import { register as apiRegister } from '$lib/api'; // Renamed to avoid conflict
+// Removed circular dependency on api.ts
+// import { register as apiRegister } from '$lib/api'; 
 
 // Define the shape of the user and auth state
 import type { User } from '$lib/types';
@@ -94,7 +95,18 @@ export const auth = {
 
     // Register method
     register: async (userData: any) => {
-        const data = await apiRegister(userData);
+        const response = await fetch(`${API_BASE_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Registration failed');
+        }
+
+        const data = await response.json();
         authState.user = data.user;
         authState.accessToken = data.access_token;
         authState.refreshToken = data.refresh_token;
