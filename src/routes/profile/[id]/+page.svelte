@@ -139,11 +139,11 @@
 					const friendshipCheck = await apiRequest('GET', `/friendships/check?other_user_id=${id}`);
 					if (friendshipCheck.are_friends) {
 						friendshipStatus = 'friends';
-					} else if (friendshipCheck.RequestSent) {
+					} else if (friendshipCheck.request_sent) {
 						friendshipStatus = 'pending';
-					} else if (friendshipCheck.IsBlockedByViewer || friendshipCheck.HasBlockedViewer) {
+					} else if (friendshipCheck.is_blocked_by_viewer || friendshipCheck.has_blocked_viewer) {
 						friendshipStatus = 'blocked';
-					} else if (friendshipCheck.RequestReceived) {
+					} else if (friendshipCheck.request_received) {
 						friendshipStatus = 'pending';
 					} else {
 						friendshipStatus = 'none';

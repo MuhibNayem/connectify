@@ -1,20 +1,25 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import * as Icons from '@lucide/svelte';
 	import { getMarketplaceConversations, getProduct } from '$lib/api/marketplace';
-	import type { ConversationSummary } from '$lib/api';
+	import { getUserByID, type ConversationSummary } from '$lib/api';
 	import type { Product } from '$lib/api/marketplace';
 	import ChatWindow from '$lib/components/messages/ChatWindow.svelte';
 	import ProductDetailsModal from '$lib/components/marketplace/ProductDetailsModal.svelte';
 	import { formatDistanceToNow } from 'date-fns';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { page } from '$app/stores';
-	import { goto, replaceState } from '$app/navigation';
+	import { replaceState } from '$app/navigation';
+	import { presenceStore, type PresenceState } from '$lib/stores/presence';
+	import { websocketMessages } from '$lib/websocket';
 
 	// Inbox State
 	let conversations = $state<ConversationSummary[]>([]);
 	let selectedConversationId = $state<string | null>(null);
 	let loadingConversations = $state(true);
+
+	// Presence state (same pattern as ConversationList)
+	let presenceState = $state<PresenceState>({});
 
 	// Product modal state (for when clicking product in chat)
 	let selectedProduct = $state<Product | null>(null);
@@ -22,6 +27,10 @@
 	// Pre-fill state for new conversations (from URL params)
 	let pendingProduct = $state<Product | null>(null);
 	let pendingMessage = $state<string>('');
+
+	// Cleanup functions
+	let unsubscribePresence: (() => void) | null = null;
+	let unsubscribeWS: (() => void) | null = null;
 
 	async function loadConversations() {
 		loadingConversations = true;
@@ -37,6 +46,61 @@
 	onMount(async () => {
 		await loadConversations();
 
+		// Subscribe to Presence Store (same as ConversationList)
+		unsubscribePresence = presenceStore.subscribe((value) => {
+			presenceState = value;
+		});
+
+		// Subscribe to WebSocket messages for real-time updates (same pattern as ConversationList)
+		unsubscribeWS = websocketMessages.subscribe((event) => {
+			if (!event) return;
+
+			switch (event.type) {
+				case 'MESSAGE_CREATED': {
+					const newMessage = event.data;
+
+					// Only process marketplace messages
+					if (!newMessage.is_marketplace) return;
+
+					console.log('[MarketplaceInbox] Received MESSAGE_CREATED:', newMessage);
+
+					// Update the conversation's last message and timestamp
+					let updated = false;
+					conversations = conversations.map((conv) => {
+						// For direct messages, check if either sender or receiver is this conversation
+						if (newMessage.sender_id === conv.id || newMessage.receiver_id === conv.id) {
+							updated = true;
+							return {
+								...conv,
+								last_message_content: newMessage.content || 'Sent a file',
+								last_message_timestamp: newMessage.created_at,
+								last_message_sender_id: newMessage.sender_id,
+								last_message_sender_name: newMessage.sender_name,
+								last_message_is_encrypted: newMessage.is_encrypted,
+								unread_count:
+									newMessage.sender_id !== auth.state.user?.id ? (conv.unread_count || 0) + 1 : 0
+							};
+						}
+						return conv;
+					});
+
+					// Re-sort conversations by timestamp
+					if (updated) {
+						conversations = [...conversations].sort((a, b) => {
+							const timeA = a.last_message_timestamp
+								? new Date(a.last_message_timestamp).getTime()
+								: 0;
+							const timeB = b.last_message_timestamp
+								? new Date(b.last_message_timestamp).getTime()
+								: 0;
+							return timeB - timeA;
+						});
+					}
+					break;
+				}
+			}
+		});
+
 		// Check URL for seller/product params (from "Message Seller" click)
 		const sellerId = $page.url.searchParams.get('seller');
 		const productId = $page.url.searchParams.get('product_id');
@@ -46,13 +110,43 @@
 			// Select the conversation with this seller
 			selectedConversationId = `user-${sellerId}`;
 
+			// Check if this seller is already in our conversation list
+			const existingConv = conversations.find((c) => c.id === sellerId);
+
+			if (!existingConv) {
+				// Create a placeholder conversation for this seller
+				try {
+					const sellerInfo = await getUserByID(sellerId);
+					const placeholderConv: ConversationSummary = {
+						id: sellerId,
+						name: sellerInfo.username || 'Seller',
+						avatar: sellerInfo.avatar,
+						is_group: false,
+						unread_count: 0,
+						last_message_content: 'New conversation',
+						last_message_timestamp: undefined
+					};
+					conversations = [placeholderConv, ...conversations];
+				} catch (err) {
+					console.error('Failed to fetch seller info:', err);
+					// Still create placeholder with minimal info
+					const placeholderConv: ConversationSummary = {
+						id: sellerId,
+						name: productTitle ? `${productTitle} Seller` : 'Seller',
+						is_group: false,
+						unread_count: 0,
+						last_message_content: 'New conversation'
+					};
+					conversations = [placeholderConv, ...conversations];
+				}
+			}
+
 			// Fetch product details for the pending product attachment
 			try {
 				pendingProduct = await getProduct(productId);
 				pendingMessage = `Hi, is this still available?`;
 			} catch (err) {
 				console.error('Failed to load product for pre-fill:', err);
-				// Still set up the conversation even without product details
 				pendingMessage = `Hi, I'm interested in: ${productTitle || 'your product'}`;
 			}
 
@@ -65,6 +159,11 @@
 		}
 	});
 
+	onDestroy(() => {
+		if (unsubscribePresence) unsubscribePresence();
+		if (unsubscribeWS) unsubscribeWS();
+	});
+
 	function handleCloseProductModal() {
 		selectedProduct = null;
 	}
@@ -75,10 +174,13 @@
 			alert('Please log in to message seller');
 			return;
 		}
-		// Close the modal
 		selectedProduct = null;
-		// Already in inbox, just reload conversations
 		await loadConversations();
+	}
+
+	// Called when a message is sent from ChatWindow (sender side update)
+	function handleMessageSent() {
+		loadConversations();
 	}
 </script>
 
@@ -122,7 +224,7 @@
 			<div class="border-t border-gray-200"></div>
 		</div>
 
-		<!-- Conversation List (under tabs in sidebar) -->
+		<!-- Conversation List -->
 		<div class="flex-1 overflow-y-auto">
 			{#if loadingConversations}
 				<div class="p-4 text-center text-gray-500">Loading chats...</div>
@@ -148,11 +250,19 @@
 								: ''}"
 							onclick={() => (selectedConversationId = `user-${conv.id}`)}
 						>
-							<img
-								src={conv.avatar || `https://ui-avatars.com/api/?name=${conv.name}`}
-								alt=""
-								class="h-12 w-12 rounded-full bg-gray-200 object-cover"
-							/>
+							<div class="relative">
+								<img
+									src={conv.avatar || `https://ui-avatars.com/api/?name=${conv.name}`}
+									alt=""
+									class="h-12 w-12 rounded-full bg-gray-200 object-cover"
+								/>
+								<!-- Online status indicator (using presenceStore) -->
+								{#if presenceState[conv.id]?.status === 'online'}
+									<span
+										class="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500"
+									></span>
+								{/if}
+							</div>
 							<div class="min-w-0 flex-1">
 								<div class="flex items-baseline justify-between">
 									<span class="truncate font-semibold text-gray-900">{conv.name}</span>
@@ -168,6 +278,13 @@
 									{conv.last_message_content || 'Started a chat'}
 								</p>
 							</div>
+							{#if conv.unread_count && conv.unread_count > 0}
+								<span
+									class="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-medium text-white"
+								>
+									{conv.unread_count}
+								</span>
+							{/if}
 						</button>
 					{/each}
 				</ul>
@@ -175,7 +292,7 @@
 		</div>
 	</div>
 
-	<!-- Chat Window (main content area) -->
+	<!-- Chat Window -->
 	<div class="relative flex h-full flex-1 flex-col bg-gray-50">
 		{#if selectedConversationId}
 			<ChatWindow
@@ -183,8 +300,8 @@
 				isMarketplace={true}
 				initialProduct={pendingProduct}
 				initialMessage={pendingMessage}
+				onMessageSent={handleMessageSent}
 				onProductClick={async (productId) => {
-					// Open product modal instead of navigating
 					try {
 						const product = await getProduct(productId);
 						selectedProduct = product;

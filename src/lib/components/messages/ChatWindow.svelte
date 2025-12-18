@@ -41,13 +41,15 @@ It orchestrates the display of messages and the message input field.
 		initialProduct = null,
 		initialMessage = '',
 		isMarketplace = false,
-		onProductClick = undefined
+		onProductClick = undefined,
+		onMessageSent = undefined
 	} = $props<{
 		conversationId: string;
 		initialProduct?: any; // Product object
 		initialMessage?: string;
 		isMarketplace?: boolean; // If true, only fetch marketplace messages
 		onProductClick?: (productId: string) => void; // Callback when product is clicked in chat
+		onMessageSent?: () => void; // Callback when a message is sent
 	}>();
 
 	let conversationType = $derived(conversationId.split('-')[0]);
@@ -855,6 +857,11 @@ It orchestrates the display of messages and the message input field.
 				); // Keep plaintext content
 			}
 
+			// Notify parent that a message was sent (for conversation list refresh)
+			if (onMessageSent) {
+				onMessageSent();
+			}
+
 			// We DO NOT re-emit to websocketMessages here to avoid jumpiness,
 			// unless we really want to confirm the ID.
 			// Actually, real WS event will come too.
@@ -1391,6 +1398,7 @@ It orchestrates the display of messages and the message input field.
 
 	<MessageInput
 		bind:value={messageInputDraft}
+		{conversationId}
 		onSend={async (content, files) => {
 			// Inject product ID to content payload if pending
 			// Since our MessageInput just returns content/files, we need to handle the sending manually OR modify handleSendMessage
@@ -1400,7 +1408,7 @@ It orchestrates the display of messages and the message input field.
 			messageInputDraft = '';
 		}}
 		onTyping={() => {
-			// typing logic
+			// typing logic handled in MessageInput itself
 		}}
 	/>
 
