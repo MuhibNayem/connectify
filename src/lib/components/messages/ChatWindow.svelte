@@ -34,7 +34,17 @@ It orchestrates the display of messages and the message input field.
 
 	let showGroupInfo = $state(false);
 
-	let { conversationId } = $props<{ conversationId: string }>();
+	import { getProduct } from '$lib/api/marketplace'; // Import getProduct if needed or assume passed product object
+
+	let {
+		conversationId,
+		initialProduct = null,
+		initialMessage = ''
+	} = $props<{
+		conversationId: string;
+		initialProduct?: any; // Product object
+		initialMessage?: string;
+	}>();
 
 	let conversationType = $derived(conversationId.split('-')[0]);
 	let currentChatId = $derived(conversationId.split('-')[1]);
@@ -46,6 +56,22 @@ It orchestrates the display of messages and the message input field.
 	let isOpponentTyping = $state(false);
 	let typingTimeout: ReturnType<typeof setTimeout>;
 	let isSending = $state(false);
+
+	// Pre-fill State
+	let pendingProduct = $state<any>(initialProduct);
+	let messageInputDraft = $state(initialMessage);
+
+	// Reset pending state when conversation changes, unless it matches the initial prop intent
+	$effect(() => {
+		if (conversationId && initialProduct) {
+			// If we switched to a new conversation with an intent to send a product
+			pendingProduct = initialProduct;
+			messageInputDraft = initialMessage;
+		} else if (conversationId) {
+			pendingProduct = null;
+			messageInputDraft = '';
+		}
+	});
 
 	// Pagination State
 	let page = $state(1);
@@ -633,7 +659,7 @@ It orchestrates the display of messages and the message input field.
 		}, 3000); // Hide after 3 seconds of no new typing events
 	}
 
-	async function handleSendMessage(content: string, files: File[] = []) {
+	async function handleSendMessage(content: string, files: File[] = [], productId?: string) {
 		if ((!content.trim() && files.length === 0) || isSending) return;
 
 		isSending = true;
@@ -745,6 +771,13 @@ It orchestrates the display of messages and the message input field.
 					payload['group_id'] = id;
 				} else {
 					payload['receiver_id'] = id;
+				}
+
+				if (productId) {
+					payload['product_id'] = productId;
+					payload['content_type'] = 'product'; // Override or set type? Usually hybrid.
+					// If we follow FB style, it's a message WITH a product attachment.
+					// Backend supports 'product_id' field.
 				}
 			}
 
@@ -1274,10 +1307,45 @@ It orchestrates the display of messages and the message input field.
 		{/if}
 	</div>
 
-	<!-- Message Input -->
+	<!-- Pending Product Attachment Preview -->
+	{#if pendingProduct}
+		<div class="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-2">
+			<div class="flex items-center gap-3">
+				<img
+					src={pendingProduct.images?.[0] || 'https://via.placeholder.com/50'}
+					alt="Product"
+					class="h-12 w-12 rounded border border-gray-300 object-cover"
+				/>
+				<div>
+					<p class="text-sm font-semibold text-gray-900">{pendingProduct.title}</p>
+					<p class="text-xs text-gray-500">${pendingProduct.price}</p>
+				</div>
+			</div>
+			<button
+				class="text-gray-400 hover:text-gray-600"
+				onclick={() => {
+					pendingProduct = null;
+					messageInputDraft = '';
+				}}
+			>
+				✕
+			</button>
+		</div>
+	{/if}
+
 	<MessageInput
-		onSendMessage={async (content, files) => await handleSendMessage(content, files)}
-		{conversationId}
+		bind:value={messageInputDraft}
+		onSend={async (content, files) => {
+			// Inject product ID to content payload if pending
+			// Since our MessageInput just returns content/files, we need to handle the sending manually OR modify handleSendMessage
+			// Let's modify handleSendMessage to accept optional product_id
+			await handleSendMessage(content, files, pendingProduct?.id);
+			pendingProduct = null; // Clear after send
+			messageInputDraft = '';
+		}}
+		onTyping={() => {
+			// typing logic
+		}}
 	/>
 
 	<Lightbox />
