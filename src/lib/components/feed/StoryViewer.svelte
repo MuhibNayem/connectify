@@ -359,7 +359,7 @@
 					}}
 				>
 					<Eye size={20} />
-					<span class="font-semibold">{currentStory?.viewers?.length || 0} Viewers</span>
+					<span class="font-semibold">{currentStory?.view_count || 0} Viewers</span>
 				</button>
 			{:else}
 				<!-- Reaction Bar (Viewer View) -->
