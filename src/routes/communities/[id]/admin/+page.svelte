@@ -39,6 +39,7 @@
 		name: '',
 		description: '',
 		privacy: '',
+		visibility: '',
 		require_post_approval: false,
 		require_join_approval: false,
 		allow_member_posts: true // Default to true for UI, but will overwrite from community
@@ -50,6 +51,7 @@
 				name: community.name,
 				description: community.description,
 				privacy: community.privacy,
+				visibility: community.visibility || 'visible',
 				require_post_approval: community.settings?.require_post_approval || false,
 				require_join_approval: community.settings?.require_join_approval || false,
 				allow_member_posts:
@@ -146,7 +148,8 @@
 			// Cast privacy to correct string literal type or standard string from form
 			const payload = {
 				...settingsForm,
-				privacy: settingsForm.privacy as 'public' | 'closed' | 'secret'
+				privacy: settingsForm.privacy as 'public' | 'closed' | 'secret',
+				visibility: settingsForm.visibility as 'visible' | 'hidden'
 			};
 			await updateCommunitySettings(community.id, payload);
 			alert('Settings saved successfully');
@@ -323,6 +326,29 @@
 							bind:value={settingsForm.description}
 							class="h-24 w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 						/>
+					</div>
+
+					<div class="grid grid-cols-2 gap-4">
+						<div>
+							<label class="mb-1 block text-sm font-medium text-gray-700">Privacy</label>
+							<select
+								bind:value={settingsForm.privacy}
+								class="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+							>
+								<option value="public">Public</option>
+								<option value="private">Private</option>
+							</select>
+						</div>
+						<div>
+							<label class="mb-1 block text-sm font-medium text-gray-700">Visibility</label>
+							<select
+								bind:value={settingsForm.visibility}
+								class="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+							>
+								<option value="visible">Visible</option>
+								<option value="hidden">Hidden</option>
+							</select>
+						</div>
 					</div>
 
 					<div class="border-t border-gray-100 pt-4">

@@ -524,6 +524,7 @@ export interface Community {
 	avatar: string;
 	cover_image: string;
 	privacy: CommunityPrivacy;
+	visibility: 'visible' | 'hidden';
 	settings: CommunitySettings;
 	stats: CommunityStats;
 	is_member?: boolean;
@@ -549,6 +550,7 @@ export interface UpdateCommunityRequest {
 	avatar?: string;
 	cover_image?: string;
 	privacy?: CommunityPrivacy;
+	visibility?: 'visible' | 'hidden';
 	require_post_approval?: boolean;
 	require_join_approval?: boolean;
 	allow_member_posts?: boolean;

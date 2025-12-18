@@ -39,7 +39,7 @@
 				</div>
 
 				<div class="flex items-start gap-3">
-					{#if community?.stats?.visibility === 'visible'}
+					{#if community?.visibility === 'visible'}
 						<Eye class="mt-1 text-gray-700" size={20} />
 						<div>
 							<h3 class="font-semibold text-gray-900">Visible</h3>
