@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Check } from '@lucide/svelte';
+	import { onMount } from 'svelte';
 
 	let {
 		open = $bindable(false),
@@ -18,8 +19,8 @@
 	let loading = $state(false);
 	let selectedIds = $state<Set<string>>(new Set());
 	const LIMIT = 50;
-	let offset = $state(0);
-	let hasMore = $state(true);
+	let page = $state(1);
+	let hasMore = $state(false);
 
 	async function fetchTimelineMedia(reset = false) {
 		if (loading) return;
@@ -32,26 +33,37 @@
 			if (timelineAlbum) {
 				if (reset) {
 					media = [];
-					offset = 0;
+					page = 1;
 					hasMore = true;
 				}
 
 				// 2. Fetch media from timeline album, filtered by type=image
-				const items = await apiRequest(
+				const response = await apiRequest(
 					'GET',
-					`/albums/${timelineAlbum.id}/media?limit=${LIMIT}&offset=${offset}&type=image`
+					`/albums/${timelineAlbum.id}/media?limit=${LIMIT}&page=${page}&type=image`
 				);
+
+				const items = response.media || [];
+				const total = response.total || 0;
 
 				if (items && items.length > 0) {
 					media = [...media, ...items];
-					offset += items.length;
-					if (items.length < LIMIT) hasMore = false;
+					page++;
+					hasMore = items.length >= LIMIT && media.length < total;
+					const currentPage = response.page; // 2
+					const totalItems = response.total; // 82
+					const limit = response.limit; // 50
+
+					// Calculate if this is the last possible page
+					const isLastPage = currentPage * limit >= totalItems;
+					hasMore = !isLastPage;
 				} else {
 					hasMore = false;
 				}
 			}
 		} catch (err) {
 			console.error('Failed to fetch timeline media', err);
+			hasMore = false;
 		} finally {
 			loading = false;
 		}
@@ -74,11 +86,9 @@
 		selectedIds = new Set();
 	}
 
-	$effect(() => {
-		if (open && userId) {
-			fetchTimelineMedia(true);
-			selectedIds = new Set();
-		}
+	onMount(() => {
+		fetchTimelineMedia(true);
+		selectedIds = new Set();
 	});
 </script>
 
@@ -136,9 +146,9 @@
 					</div>
 				{:else if hasMore}
 					<div class="flex justify-center py-4">
-						<Button variant="outline" size="sm" onclick={() => fetchTimelineMedia()}
-							>Load More</Button
-						>
+						<Button variant="outline" size="sm" onclick={() => fetchTimelineMedia()}>
+							Load More
+						</Button>
 					</div>
 				{/if}
 			{/if}

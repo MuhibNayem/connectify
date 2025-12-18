@@ -246,7 +246,7 @@
 	}
 
 	// Album Media Pagination
-	let albumOffset = $state(0);
+	let albumPage = $state(1);
 	const ALBUM_LIMIT = 50;
 	let albumHasMore = $state(true);
 
@@ -254,20 +254,25 @@
 		loadingAlbumMedia = true;
 		if (reset) {
 			albumMedia = [];
-			albumOffset = 0;
+			albumPage = 1;
 			albumHasMore = true;
 		}
 
 		try {
-			const media = await apiRequest(
+			const response = await apiRequest(
 				'GET',
-				`/albums/${albumId}/media?limit=${ALBUM_LIMIT}&offset=${albumOffset}`
+				`/albums/${albumId}/media?limit=${ALBUM_LIMIT}&page=${albumPage}`
 			);
+
+			// Handle page-based pagination format
+			const media = response.media || [];
+			const total = response.total || 0;
 
 			if (media && media.length > 0) {
 				albumMedia = [...albumMedia, ...media];
-				albumOffset += media.length;
-				if (media.length < ALBUM_LIMIT) albumHasMore = false;
+				albumPage++;
+				// Calculate hasMore: if we got less than limit OR current items >= total
+				albumHasMore = media.length >= ALBUM_LIMIT && albumMedia.length < total;
 			} else {
 				albumHasMore = false;
 			}
@@ -899,6 +904,15 @@
 								</div>
 							{/each}
 						</div>
+
+						<!-- Infinite Scroll Sentinel -->
+						{#if albumHasMore}
+							<div bind:this={albumSentinel} class="py-4 text-center">
+								{#if loadingAlbumMedia}
+									<div class="text-muted-foreground">Loading more...</div>
+								{/if}
+							</div>
+						{/if}
 					{:else}
 						<div class="text-muted-foreground col-span-full py-12 text-center">
 							<div
