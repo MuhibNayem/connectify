@@ -39,11 +39,15 @@ It orchestrates the display of messages and the message input field.
 	let {
 		conversationId,
 		initialProduct = null,
-		initialMessage = ''
+		initialMessage = '',
+		isMarketplace = false,
+		onProductClick = undefined
 	} = $props<{
 		conversationId: string;
 		initialProduct?: any; // Product object
 		initialMessage?: string;
+		isMarketplace?: boolean; // If true, only fetch marketplace messages
+		onProductClick?: (productId: string) => void; // Callback when product is clicked in chat
 	}>();
 
 	let conversationType = $derived(conversationId.split('-')[0]);
@@ -79,6 +83,9 @@ It orchestrates the display of messages and the message input field.
 	let hasMore = $state(true);
 	let isFetchingMore = $state(false);
 	let initialLoadComplete = $state(false); // To differntiate initial load vs pagination
+
+	// Marketplace: Track the product_id from the conversation to persist it for all messages
+	let marketplaceProductId = $state<string | null>(null);
 
 	let conversationPartner = $state<ConversationSummary | null>(null);
 	let presenceState = $state<PresenceState>({});
@@ -513,6 +520,7 @@ It orchestrates the display of messages and the message input field.
 			hasMore = true;
 			messages = [];
 			initialLoadComplete = false;
+			marketplaceProductId = null; // Reset for new conversation
 			fetchMessages(1);
 			loadConversationPartner();
 		}
@@ -525,6 +533,20 @@ It orchestrates the display of messages and the message input field.
 			const partner = summaries.find((s) => s.id === id && s.is_group === (type === 'group'));
 			if (partner) {
 				conversationPartner = partner;
+			} else if (type === 'user') {
+				// Partner not found in summaries (might be non-friend marketplace seller)
+				// Fetch user info directly
+				const { getUserByID } = await import('$lib/api');
+				const user = await getUserByID(id);
+				if (user) {
+					conversationPartner = {
+						id: user.id,
+						name: user.username || user.email || 'User',
+						avatar: user.avatar,
+						is_group: false,
+						unread_count: 0
+					};
+				}
 			}
 
 			// E2EE: Fetch Public Key if available
@@ -569,9 +591,16 @@ It orchestrates the display of messages and the message input field.
 
 		try {
 			const [type, id] = conversationId.split('-');
-			let params: { receiverID?: string; groupID?: string; page: number; limit: number } = {
+			let params: {
+				receiverID?: string;
+				groupID?: string;
+				page: number;
+				limit: number;
+				marketplace?: boolean;
+			} = {
 				page: pageNum,
-				limit: limit
+				limit: limit,
+				marketplace: isMarketplace
 			};
 
 			if (type === 'group') {
@@ -600,6 +629,15 @@ It orchestrates the display of messages and the message input field.
 				if (pageNum === 1) {
 					messages = newMessages;
 					initialLoadComplete = true;
+
+					// In marketplace mode, extract product_id from messages to persist it
+					if (isMarketplace && !marketplaceProductId) {
+						const msgWithProduct = newMessages.find((m: any) => m.product_id);
+						if (msgWithProduct) {
+							marketplaceProductId = msgWithProduct.product_id;
+						}
+					}
+
 					// Scroll to bottom on initial load
 					tick().then(() => {
 						if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -611,6 +649,14 @@ It orchestrates the display of messages and the message input field.
 					const uniqueNewMessages = newMessages.filter((m) => !existingIds.has(m.id));
 
 					if (uniqueNewMessages.length > 0) {
+						// In marketplace mode, also check paginated messages for product_id
+						if (isMarketplace && !marketplaceProductId) {
+							const msgWithProduct = uniqueNewMessages.find((m: any) => m.product_id);
+							if (msgWithProduct) {
+								marketplaceProductId = msgWithProduct.product_id;
+							}
+						}
+
 						const previousScrollHeight = chatContainer.scrollHeight;
 						messages = [...uniqueNewMessages, ...messages];
 
@@ -759,6 +805,11 @@ It orchestrates the display of messages and the message input field.
 					formData.append('files', file);
 				});
 
+				// Marketplace context: always send is_marketplace flag
+				if (isMarketplace) {
+					formData.append('is_marketplace', 'true');
+				}
+
 				payload = formData;
 			} else {
 				payload = {
@@ -773,11 +824,15 @@ It orchestrates the display of messages and the message input field.
 					payload['receiver_id'] = id;
 				}
 
+				// Marketplace context: always send is_marketplace flag
+				if (isMarketplace) {
+					payload['is_marketplace'] = true;
+				}
+
+				// Product attachment (optional metadata for product card display)
 				if (productId) {
 					payload['product_id'] = productId;
-					payload['content_type'] = 'product'; // Override or set type? Usually hybrid.
-					// If we follow FB style, it's a message WITH a product attachment.
-					// Backend supports 'product_id' field.
+					payload['content_type'] = 'product';
 				}
 			}
 
@@ -1289,6 +1344,7 @@ It orchestrates the display of messages and the message input field.
 						on:rendered={handleMessageRendered}
 						on:deleted={handleMessageDeleted}
 						{conversationId}
+						{onProductClick}
 					/>
 					<!-- We can pass conversationId or callbacks to Message if needed for specific actions -->
 				</div>

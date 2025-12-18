@@ -4,8 +4,12 @@
 	import { toggleSaveProduct } from '$lib/api/marketplace';
 	import { createEventDispatcher } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { auth } from '$lib/stores/auth.svelte';
 
 	export let product: Product;
+
+	// Check if this is the user's own product
+	$: isOwnProduct = auth.state.user?.id === product.seller?.id;
 
 	let isHovered = false;
 	let currentImageIndex = 0;
@@ -72,13 +76,15 @@
 		<div
 			class="absolute bottom-3 right-3 flex translate-y-2 transform gap-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
 		>
-			<button
-				class="rounded-full bg-white/20 p-2 text-white backdrop-blur-md transition-colors hover:bg-white/40"
-				on:click={handleMessage}
-				title="Message Seller"
-			>
-				<MessageCircle size={18} />
-			</button>
+			{#if !isOwnProduct}
+				<button
+					class="rounded-full bg-white/20 p-2 text-white backdrop-blur-md transition-colors hover:bg-white/40"
+					on:click={handleMessage}
+					title="Message Seller"
+				>
+					<MessageCircle size={18} />
+				</button>
+			{/if}
 			<button
 				class="rounded-full bg-white/20 p-2 backdrop-blur-md transition-colors hover:bg-white/40 {isSaved
 					? 'text-red-500'

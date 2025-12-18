@@ -317,13 +317,14 @@ export async function getUserGroups(): Promise<GroupResponse[]> {
 	return apiRequest('GET', '/groups', undefined, true);
 }
 
-export async function getMessages(params: { receiverID?: string; groupID?: string; page?: number; limit?: number; before?: string }): Promise<MessageResponse> {
+export async function getMessages(params: { receiverID?: string; groupID?: string; page?: number; limit?: number; before?: string; marketplace?: boolean }): Promise<MessageResponse> {
 	const query = new URLSearchParams();
 	if (params.receiverID) query.set('receiverID', params.receiverID);
 	if (params.groupID) query.set('groupID', params.groupID);
 	if (params.page) query.set('page', String(params.page));
 	if (params.limit) query.set('limit', String(params.limit));
 	if (params.before) query.set('before', params.before);
+	if (params.marketplace) query.set('marketplace', 'true');
 
 	return apiRequest('GET', `/messages?${query.toString()}`, undefined, true);
 }

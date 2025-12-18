@@ -24,6 +24,16 @@ export interface Message {
 	reactions?: Reaction[];
 	reply_to_message_id?: string; // Added
 	product_id?: string; // Added for marketplace
+	is_marketplace?: boolean; // Marketplace context flag
+	// Embedded product data (populated by backend $lookup for optimization)
+	product?: {
+		id: string;
+		title: string;
+		price: number;
+		currency: string;
+		images?: string[];
+		status: string;
+	};
 	created_at: string;
 	updated_at?: string;
 	// E2EE

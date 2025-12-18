@@ -1,7 +1,3 @@
-<!--
-Component to display a single message bubble.
-It styles messages differently based on whether they were sent by the current user.
--->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { createEventDispatcher } from 'svelte';
@@ -10,13 +6,39 @@ It styles messages differently based on whether they were sent by the current us
 	import type { Message } from '$lib/types';
 	import MessageActions from './MessageActions.svelte';
 	import MessageReactions from './MessageReactions.svelte';
+	import { getProduct, type Product } from '$lib/api/marketplace';
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 
 	export let message: Message;
+	export let conversationId: string = '';
+	export let onProductClick: ((productId: string) => void) | undefined = undefined;
 
 	const dispatch = createEventDispatcher();
 
-	onMount(() => {
+	// Product state for marketplace messages
+	// Use embedded product data if available, otherwise fallback to API call
+	let linkedProduct: Product | null = null;
+	let loadingProduct = false;
+
+	onMount(async () => {
 		dispatch('rendered', { messageId: message.id });
+
+		// Use embedded product data from message response (optimized - no API call needed)
+		if (message.product && message.product.id) {
+			linkedProduct = message.product as Product;
+		}
+		// Fallback: Fetch product if message has product_id but no embedded data
+		else if (message.product_id && !message.product) {
+			loadingProduct = true;
+			try {
+				linkedProduct = await getProduct(message.product_id);
+			} catch (e) {
+				console.error('Failed to load linked product:', e);
+			} finally {
+				loadingProduct = false;
+			}
+		}
 	});
 
 	const isMe = auth.state.user?.id === message.sender_id;
@@ -82,8 +104,6 @@ It styles messages differently based on whether they were sent by the current us
 		// Show fallback
 		target.nextElementSibling?.classList.remove('hidden');
 	}
-	import { fly } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
 </script>
 
 <div
@@ -161,6 +181,104 @@ It styles messages differently based on whether they were sent by the current us
 			class:rounded-s-xl={isMe}
 			class:rounded-ee-xl={isMe}
 		>
+			<!-- Product Card for Marketplace Messages -->
+			{#if message.product_id}
+				<div
+					class="mb-2 overflow-hidden rounded-lg border {isMe
+						? 'border-blue-400 bg-blue-400/20'
+						: 'border-gray-200 bg-white'}"
+				>
+					{#if loadingProduct}
+						<div class="flex items-center gap-3 p-3">
+							<div class="h-16 w-16 animate-pulse rounded bg-gray-200"></div>
+							<div class="flex-1 space-y-2">
+								<div class="h-4 w-3/4 animate-pulse rounded bg-gray-200"></div>
+								<div class="h-3 w-1/2 animate-pulse rounded bg-gray-200"></div>
+							</div>
+						</div>
+					{:else if linkedProduct}
+						{#if onProductClick}
+							<button
+								type="button"
+								onclick={() => onProductClick(linkedProduct!.id)}
+								class="flex w-full items-start gap-3 p-3 text-left transition-all duration-200 {isMe
+									? 'hover:bg-blue-600/50'
+									: 'hover:bg-blue-50'} rounded-lg"
+							>
+								<img
+									src={linkedProduct.images?.[0] || 'https://via.placeholder.com/64'}
+									alt={linkedProduct.title}
+									class="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
+								/>
+								<div class="min-w-0 flex-1">
+									<p class="font-semibold leading-tight {isMe ? 'text-white' : 'text-gray-900'}">
+										{linkedProduct.title}
+									</p>
+									<p class="mt-1 text-sm font-bold {isMe ? 'text-blue-100' : 'text-blue-600'}">
+										{linkedProduct.currency}
+										{linkedProduct.price.toLocaleString()}
+									</p>
+									<span
+										class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium
+										{linkedProduct.status === 'available'
+											? 'bg-green-100 text-green-700'
+											: linkedProduct.status === 'sold'
+												? 'bg-red-100 text-red-600'
+												: 'bg-gray-100 text-gray-600'}"
+									>
+										{linkedProduct.status === 'available'
+											? '✓ Available'
+											: linkedProduct.status === 'sold'
+												? 'Sold'
+												: linkedProduct.status}
+									</span>
+								</div>
+							</button>
+						{:else}
+							<a
+								href="/marketplace?product={linkedProduct.id}"
+								class="flex items-start gap-3 p-3 transition-all duration-200 {isMe
+									? 'hover:bg-blue-600/50'
+									: 'hover:bg-blue-50'} rounded-lg"
+							>
+								<img
+									src={linkedProduct.images?.[0] || 'https://via.placeholder.com/64'}
+									alt={linkedProduct.title}
+									class="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
+								/>
+								<div class="min-w-0 flex-1">
+									<p class="font-semibold leading-tight {isMe ? 'text-white' : 'text-gray-900'}">
+										{linkedProduct.title}
+									</p>
+									<p class="mt-1 text-sm font-bold {isMe ? 'text-blue-100' : 'text-blue-600'}">
+										{linkedProduct.currency}
+										{linkedProduct.price.toLocaleString()}
+									</p>
+									<span
+										class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium
+										{linkedProduct.status === 'available'
+											? 'bg-green-100 text-green-700'
+											: linkedProduct.status === 'sold'
+												? 'bg-red-100 text-red-600'
+												: 'bg-gray-100 text-gray-600'}"
+									>
+										{linkedProduct.status === 'available'
+											? '✓ Available'
+											: linkedProduct.status === 'sold'
+												? 'Sold'
+												: linkedProduct.status}
+									</span>
+								</div>
+							</a>
+						{/if}
+					{:else}
+						<div class="p-3 text-sm {isMe ? 'text-blue-200' : 'text-gray-400'}">
+							Product no longer available
+						</div>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Split media into Grid (Images/Videos) and List (Files) -->
 			<!-- Split media into Grid (Images/Videos) and List (Files) -->
 			<!-- Logic moved to script -->
@@ -176,10 +294,10 @@ It styles messages differently based on whether they were sent by the current us
 							class="relative aspect-square w-full cursor-pointer
 							{gridMedia.length === 3 && i === 0 ? 'col-span-2 aspect-[2/1]' : ''}
 							"
-							on:click={() => lightbox.open(gridMedia as any, i)}
+							onclick={() => lightbox.open(gridMedia as any, i)}
 							role="button"
 							tabindex="0"
-							on:keypress={(e) => e.key === 'Enter' && lightbox.open(gridMedia as any, i)}
+							onkeypress={(e) => e.key === 'Enter' && lightbox.open(gridMedia as any, i)}
 						>
 							{#if item.type === 'video'}
 								<!-- svelte-ignore a11y-media-has-caption -->
@@ -218,7 +336,7 @@ It styles messages differently based on whether they were sent by the current us
 									src={item.url}
 									alt="Attachment"
 									class="h-full w-full bg-gray-100 object-cover transition-opacity hover:opacity-90"
-									on:error={handleImgError}
+									onerror={handleImgError}
 								/>
 							{/if}
 

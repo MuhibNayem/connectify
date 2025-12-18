@@ -23,6 +23,7 @@
 	let files: File[] = [];
 	let showEmojiPicker = false;
 	let fileInput: HTMLInputElement;
+	let textareaRef: HTMLTextAreaElement;
 
 	// Mentions logic
 	let showMentions = false;
@@ -150,10 +151,14 @@
 			content = '';
 			files = [];
 			if (fileInput) fileInput.value = '';
+			// Re-focus the input after send
+			if (textareaRef) textareaRef.focus();
 		} catch (error) {
 			console.error('Failed to send message:', error);
 		} finally {
 			isSending = false;
+			// Also focus on error case
+			if (textareaRef) textareaRef.focus();
 		}
 	}
 
@@ -355,6 +360,7 @@
 			</button>
 
 			<textarea
+				bind:this={textareaRef}
 				bind:value
 				disabled={isSending}
 				on:input={handleTyping}

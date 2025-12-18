@@ -4,10 +4,14 @@
 	import { X, MessageCircle, Heart, Share2, MapPin, Clock, Tag } from '@lucide/svelte';
 	import type { Product } from '$lib/api/marketplace';
 	import { toggleSaveProduct } from '$lib/api/marketplace';
+	import { auth } from '$lib/stores/auth.svelte';
 
 	export let product: Product;
 
 	const dispatch = createEventDispatcher();
+
+	// Check if current user is the seller
+	$: isOwnProduct = auth.state.user?.id === product.seller?.id;
 	let currentImageIndex = 0;
 	let isSaved = product.is_saved || false;
 
@@ -138,14 +142,16 @@
 				</div>
 
 				<!-- Actions -->
-				<div class="grid grid-cols-2 gap-3">
-					<button
-						class="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-bold text-white shadow-lg shadow-blue-200 transition-colors hover:bg-blue-700"
-						on:click={handleMessage}
-					>
-						<MessageCircle size={20} />
-						Message
-					</button>
+				<div class="grid {isOwnProduct ? 'grid-cols-1' : 'grid-cols-2'} gap-3">
+					{#if !isOwnProduct}
+						<button
+							class="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-bold text-white shadow-lg shadow-blue-200 transition-colors hover:bg-blue-700"
+							on:click={handleMessage}
+						>
+							<MessageCircle size={20} />
+							Message Seller
+						</button>
+					{/if}
 					<button
 						class="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-100 py-3 font-bold text-gray-900 transition-colors hover:bg-gray-200"
 						on:click={handleSave}
