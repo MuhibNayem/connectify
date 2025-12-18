@@ -30,6 +30,8 @@ export interface Message {
 	edited_at?: string;
 	reactions?: MessageReaction[];
 	reply_to_message_id?: string;
+	product_id?: string;
+	is_marketplace?: boolean;
 	created_at: string;
 	updated_at?: string;
 }
@@ -43,6 +45,7 @@ export interface MessageRequest {
 	media_urls?: string[];
 	reply_to_message_id?: string;
 	product_id?: string;
+	is_marketplace?: boolean;
 }
 
 export interface MessageResponse {

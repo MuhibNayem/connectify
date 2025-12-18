@@ -38,7 +38,16 @@ Fetches friends and groups to populate the list.
 			switch (event.type) {
 				case 'MESSAGE_CREATED': {
 					const newMessage = event.data;
-					console.log('[ConversationList] Received MESSAGE_CREATED:', newMessage);
+					console.log('[ConversationList] WS Received:', {
+						id: newMessage.id,
+						is_marketplace: newMessage.is_marketplace
+					});
+
+					// Skip marketplace messages - they belong to marketplace inbox, not personal DMs
+					if (newMessage.is_marketplace === true) {
+						console.log('[ConversationList] Ignored marketplace message');
+						break;
+					}
 
 					// Update the conversation's last message and timestamp
 					let updated = false;

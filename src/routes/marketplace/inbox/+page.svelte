@@ -56,11 +56,19 @@
 			if (!event) return;
 
 			switch (event.type) {
-				case 'MESSAGE_CREATED': {
+				case 'MARKETPLACE_MESSAGE_CREATED': {
 					const newMessage = event.data;
 
+					console.log('[MarketplaceInbox] WS Received:', {
+						id: newMessage.id,
+						is_marketplace: newMessage.is_marketplace
+					});
+
 					// Only process marketplace messages
-					if (!newMessage.is_marketplace) return;
+					if (newMessage.is_marketplace !== true) {
+						console.log('[MarketplaceInbox] Ignored non-marketplace message');
+						return;
+					}
 
 					console.log('[MarketplaceInbox] Received MESSAGE_CREATED:', newMessage);
 

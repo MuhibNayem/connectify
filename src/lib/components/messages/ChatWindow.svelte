@@ -948,8 +948,17 @@ It orchestrates the display of messages and the message input field.
 			const [type, currentChatId] = conversationId.split('-');
 
 			switch (event.type) {
-				case 'MESSAGE_CREATED': {
+				case 'MESSAGE_CREATED':
+				case 'MARKETPLACE_MESSAGE_CREATED': {
 					const newMessage = event.data;
+
+					// Strict context check: Ensure message context matches window context
+					const isMsgMarketplace = newMessage.is_marketplace === true;
+					if (isMarketplace !== isMsgMarketplace) {
+						// Mismatch: Ignore
+						break;
+					}
+
 					console.log('MESSAGE_CREATED event received:', newMessage);
 
 					// Check if the new message belongs to the current conversation
@@ -989,7 +998,8 @@ It orchestrates the display of messages and the message input field.
 					}
 					break;
 				}
-				case 'MESSAGE_DELETED': {
+				case 'MESSAGE_DELETED':
+				case 'MARKETPLACE_MESSAGE_DELETED': {
 					const deletedMessage = event.data;
 					messages = messages.map((m) => {
 						if (m.id === deletedMessage.id) {
@@ -1107,10 +1117,21 @@ It orchestrates the display of messages and the message input field.
 					break;
 				}
 				case 'TYPING': {
-					const { user_id, conversation_id, is_typing } = event.data;
+					const {
+						user_id,
+						conversation_id,
+						is_typing,
+						is_marketplace: eventIsMarketplace
+					} = event.data;
 					// Only show typing indicator if the event is for the current conversation
 					// and the typing user is not the current authenticated user
-					// Re-derive type/id inside case to be sure? No, outer scope is fine if effect re-runs.
+					// Also check marketplace context matches
+
+					// Skip if marketplace context doesn't match
+					const eventMarketplaceFlag = eventIsMarketplace || false;
+					if (eventMarketplaceFlag !== isMarketplace) {
+						break; // Ignore typing from different context (marketplace vs personal)
+					}
 
 					let isRelevant = false;
 					if (type === 'group' && conversation_id === conversationId) {
@@ -1399,6 +1420,7 @@ It orchestrates the display of messages and the message input field.
 	<MessageInput
 		bind:value={messageInputDraft}
 		{conversationId}
+		{isMarketplace}
 		onSend={async (content, files) => {
 			// Inject product ID to content payload if pending
 			// Since our MessageInput just returns content/files, we need to handle the sending manually OR modify handleSendMessage

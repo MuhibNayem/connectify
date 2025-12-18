@@ -41,11 +41,21 @@
 
 	// Typing indicator logic
 	let typingTimer: any;
+	export let isMarketplace: boolean = false; // Add marketplace flag for typing context
+
 	function handleTyping() {
 		clearTimeout(typingTimer);
-		sendWebSocketMessage('typing', { isTyping: true, conversation_id: conversationId });
+		sendWebSocketMessage('typing', {
+			isTyping: true,
+			conversation_id: conversationId,
+			is_marketplace: isMarketplace
+		});
 		typingTimer = setTimeout(() => {
-			sendWebSocketMessage('typing', { isTyping: false, conversation_id: conversationId });
+			sendWebSocketMessage('typing', {
+				isTyping: false,
+				conversation_id: conversationId,
+				is_marketplace: isMarketplace
+			});
 		}, 2000); // Consider user as "stopped typing" after 2 seconds
 
 		checkForMentions();
