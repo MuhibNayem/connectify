@@ -3,7 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Check } from '@lucide/svelte';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
 	let {
 		open = $bindable(false),
@@ -17,10 +17,12 @@
 
 	let media = $state<any[]>([]);
 	let loading = $state(false);
-	let selectedIds = $state<Set<string>>(new Set());
+	let selectedUrls = $state<Set<string>>(new Set());
 	const LIMIT = 50;
 	let page = $state(1);
 	let hasMore = $state(false);
+	let sentinel = $state<HTMLElement | null>(null);
+	let observer: IntersectionObserver;
 
 	async function fetchTimelineMedia(reset = false) {
 		if (loading) return;
@@ -44,19 +46,29 @@
 				);
 
 				const items = response.media || [];
-				const total = response.total || 0;
-
 				if (items && items.length > 0) {
-					media = [...media, ...items];
-					page++;
-					hasMore = items.length >= LIMIT && media.length < total;
-					const currentPage = response.page; // 2
-					const totalItems = response.total; // 82
-					const limit = response.limit; // 50
+					// Prepare new items checking for duplicates based on URL
+					const existingUrls = new Set(media.map((m) => m.url));
+					const uniqueNewItems: any[] = [];
 
-					// Calculate if this is the last possible page
+					for (const item of items) {
+						if (!existingUrls.has(item.url)) {
+							uniqueNewItems.push(item);
+							existingUrls.add(item.url);
+						}
+					}
+
+					media = [...media, ...uniqueNewItems];
+
+					const currentPage = response.page;
+					const totalItems = response.total;
+					const limit = response.limit;
+
 					const isLastPage = currentPage * limit >= totalItems;
 					hasMore = !isLastPage;
+					if (hasMore) {
+						page++;
+					}
 				} else {
 					hasMore = false;
 				}
@@ -70,25 +82,57 @@
 	}
 
 	function toggleSelection(item: any) {
-		if (selectedIds.has(item.id)) {
-			selectedIds.delete(item.id);
+		// Create a new Set to trigger reactivity
+		const newSelectedUrls = new Set(selectedUrls);
+		if (newSelectedUrls.has(item.url)) {
+			newSelectedUrls.delete(item.url);
 		} else {
-			selectedIds.add(item.id);
+			newSelectedUrls.add(item.url);
 		}
-		// Trigger reactivity
-		selectedIds = new Set(selectedIds);
+		selectedUrls = newSelectedUrls;
 	}
 
 	function handleConfirm() {
-		const selectedItems = media.filter((item) => selectedIds.has(item.id));
+		const selectedItems = media.filter((item) => selectedUrls.has(item.url));
 		onSelect(selectedItems);
 		open = false;
-		selectedIds = new Set();
+		selectedUrls = new Set();
+	}
+
+	function setupIntersectionObserver() {
+		if (observer) observer.disconnect();
+
+		observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting && hasMore && !loading) {
+					fetchTimelineMedia();
+				}
+			},
+			{
+				rootMargin: '200px', // Load before reaching the very bottom
+				threshold: 0.1
+			}
+		);
+
+		if (sentinel) {
+			observer.observe(sentinel);
+		}
 	}
 
 	onMount(() => {
 		fetchTimelineMedia(true);
-		selectedIds = new Set();
+		selectedUrls = new Set();
+	});
+
+	onDestroy(() => {
+		if (observer) observer.disconnect();
+	});
+
+	// Re-attach observer when sentinel becomes available (e.g. after loading initial data)
+	$effect(() => {
+		if (sentinel && !loading && hasMore) {
+			setupIntersectionObserver();
+		}
 	});
 </script>
 
@@ -107,10 +151,10 @@
 				</div>
 			{:else}
 				<div class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-					{#each media as item}
+					{#each media as item (item.url)}
 						<button
-							class="relative aspect-square cursor-pointer overflow-hidden rounded-lg border-2 transition-all focus:outline-none {selectedIds.has(
-								item.id
+							class="relative aspect-square cursor-pointer overflow-hidden rounded-lg border-2 transition-all focus:outline-none {selectedUrls.has(
+								item.url
 							)
 								? 'border-primary ring-primary ring-2 ring-offset-2'
 								: 'border-transparent'}"
@@ -127,7 +171,7 @@
 								<img src={item.url} alt="Media" class="h-full w-full object-cover" />
 							{/if}
 
-							{#if selectedIds.has(item.id)}
+							{#if selectedUrls.has(item.url)}
 								<div
 									class="bg-primary absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full text-white shadow-sm"
 								>
@@ -144,20 +188,17 @@
 							class="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent"
 						></div>
 					</div>
-				{:else if hasMore}
-					<div class="flex justify-center py-4">
-						<Button variant="outline" size="sm" onclick={() => fetchTimelineMedia()}>
-							Load More
-						</Button>
-					</div>
 				{/if}
+
+				<!-- Sentinel for infinite scroll -->
+				<div bind:this={sentinel} class="h-4 w-full"></div>
 			{/if}
 		</div>
 
 		<Dialog.Footer>
 			<Button variant="ghost" onclick={() => (open = false)}>Cancel</Button>
-			<Button onclick={handleConfirm} disabled={selectedIds.size === 0}>
-				Add {selectedIds.size} Photo{selectedIds.size !== 1 ? 's' : ''}
+			<Button onclick={handleConfirm} disabled={selectedUrls.size === 0}>
+				Add {selectedUrls.size} Photo{selectedUrls.size !== 1 ? 's' : ''}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
