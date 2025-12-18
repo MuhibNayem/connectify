@@ -1,78 +1,65 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
-	import { getCommunity, type Community } from '$lib/api';
-	import { Globe, Lock, Shield, Calendar, Users } from '@lucide/svelte';
+	import { getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { Community } from '$lib/api';
+	import { Shield, Info, Globe, Lock, Calendar, Eye, EyeOff } from '@lucide/svelte';
 
-	let id = $page.params.id;
-	let community: Community | null = null;
-	let loading = true;
-
-	onMount(async () => {
-		try {
-			community = await getCommunity(id);
-		} catch (e) {
-			console.error(e);
-		} finally {
-			loading = false;
-		}
-	});
-
-	function getPrivacyIcon(p: string) {
-		if (p === 'secret') return Shield;
-		if (p === 'closed') return Lock;
-		return Globe;
-	}
+	const communityStore = getContext<Writable<Community>>('community');
+	let community = $derived($communityStore);
 </script>
 
-{#if loading}
-	<div class="animate-pulse space-y-4">
-		<div class="h-8 w-1/3 rounded bg-gray-200 dark:bg-gray-700"></div>
-		<div class="h-24 w-full rounded bg-gray-200 dark:bg-gray-700"></div>
-	</div>
-{:else if community}
-	<div class="mx-auto max-w-4xl space-y-8">
-		<!-- About Card -->
-		<div
-			class="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-		>
-			<h2 class="mb-6 text-2xl font-bold text-gray-900 dark:text-white">About this community</h2>
-
-			<p class="mb-8 whitespace-pre-line text-lg text-gray-600 dark:text-gray-300">
-				{community.description}
+<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+	<div class="col-span-2 space-y-6">
+		<!-- About Section -->
+		<div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+			<h2 class="mb-4 text-2xl font-bold text-gray-900">About this group</h2>
+			<p class="whitespace-pre-line leading-relaxed text-gray-600">
+				{community?.description || 'No description provided.'}
 			</p>
 
-			<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-				<div class="flex items-start gap-4">
-					<div
-						class="rounded-xl bg-blue-50 p-3 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
-					>
-						<svelte:component this={getPrivacyIcon(community.privacy)} class="h-6 w-6" />
-					</div>
-					<div>
-						<h3 class="font-bold capitalize text-gray-900 dark:text-white">{community.privacy}</h3>
-						<p class="text-sm text-gray-500 dark:text-gray-400">
-							{#if community.privacy === 'public'}
+			<div class="mt-6 grid grid-cols-1 gap-4 border-t border-gray-100 pt-6 sm:grid-cols-2">
+				<div class="flex items-start gap-3">
+					{#if community?.privacy === 'public'}
+						<Globe class="mt-1 text-gray-700" size={20} />
+						<div>
+							<h3 class="font-semibold text-gray-900">Public</h3>
+							<p class="text-sm text-gray-500">
 								Anyone can see who's in the group and what they post.
-							{:else if community.privacy === 'closed'}
-								Anyone can find the group, but only members can see posts.
-							{:else}
-								Only members can find the group and see posts.
-							{/if}
-						</p>
-					</div>
+							</p>
+						</div>
+					{:else}
+						<Lock class="mt-1 text-gray-700" size={20} />
+						<div>
+							<h3 class="font-semibold text-gray-900">Private</h3>
+							<p class="text-sm text-gray-500">
+								Only members can see who's in the group and what they post.
+							</p>
+						</div>
+					{/if}
 				</div>
 
-				<div class="flex items-start gap-4">
-					<div
-						class="rounded-xl bg-purple-50 p-3 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400"
-					>
-						<Calendar class="h-6 w-6" />
-					</div>
+				<div class="flex items-start gap-3">
+					{#if community?.stats?.visibility === 'visible'}
+						<Eye class="mt-1 text-gray-700" size={20} />
+						<div>
+							<h3 class="font-semibold text-gray-900">Visible</h3>
+							<p class="text-sm text-gray-500">Anyone can find this group.</p>
+						</div>
+					{:else}
+						<EyeOff class="mt-1 text-gray-700" size={20} />
+						<div>
+							<h3 class="font-semibold text-gray-900">Hidden</h3>
+							<p class="text-sm text-gray-500">Only members can find this group.</p>
+						</div>
+					{/if}
+				</div>
+
+				<div class="flex items-start gap-3">
+					<Shield class="mt-1 text-gray-700" size={20} />
 					<div>
-						<h3 class="font-bold text-gray-900 dark:text-white">History</h3>
-						<p class="text-sm text-gray-500 dark:text-gray-400">
-							Created on {new Date(community.created_at).toLocaleDateString(undefined, {
+						<h3 class="font-semibold text-gray-900">History</h3>
+						<p class="text-sm text-gray-500">
+							Created {new Date(community?.created_at).toLocaleDateString(undefined, {
 								year: 'numeric',
 								month: 'long',
 								day: 'numeric'
@@ -81,41 +68,60 @@
 					</div>
 				</div>
 
-				<div class="flex items-start gap-4">
-					<div
-						class="rounded-xl bg-green-50 p-3 text-green-600 dark:bg-green-900/20 dark:text-green-400"
-					>
-						<Users class="h-6 w-6" />
-					</div>
+				<!-- Category/General -->
+				<div class="flex items-start gap-3">
+					<Info class="mt-1 text-gray-700" size={20} />
 					<div>
-						<h3 class="font-bold text-gray-900 dark:text-white">Members</h3>
-						<p class="text-sm text-gray-500 dark:text-gray-400">
-							{community.stats.member_count} total members
+						<h3 class="font-semibold text-gray-900">General</h3>
+						<p class="text-sm text-gray-500">
+							Category: {community?.category || 'General'}
 						</p>
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<!-- Rules (Placeholder) -->
-		<div
-			class="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-		>
-			<h2 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">Group Rules</h2>
-			<ul class="space-y-4">
-				<li class="flex gap-4">
-					<span class="font-bold text-blue-600 dark:text-blue-400">1</span>
-					<span class="text-gray-600 dark:text-gray-300">Be kind and courteous.</span>
-				</li>
-				<li class="flex gap-4">
-					<span class="font-bold text-blue-600 dark:text-blue-400">2</span>
-					<span class="text-gray-600 dark:text-gray-300">No hate speech or bullying.</span>
-				</li>
-				<li class="flex gap-4">
-					<span class="font-bold text-blue-600 dark:text-blue-400">3</span>
-					<span class="text-gray-600 dark:text-gray-300">No promotions or spam.</span>
-				</li>
-			</ul>
+		<!-- Rules Section -->
+		{#if community?.rules && community.rules.length > 0}
+			<div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+				<h2 class="mb-6 text-xl font-bold text-gray-900">Group Rules</h2>
+				<ul class="space-y-6">
+					{#each community.rules as rule, i}
+						<li class="flex gap-4">
+							<span
+								class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 font-bold text-gray-900"
+							>
+								{i + 1}
+							</span>
+							<div>
+								<h3 class="mb-1 font-semibold text-gray-900">{rule.title}</h3>
+								<p class="text-sm text-gray-500">{rule.description}</p>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
+	</div>
+
+	<!-- Sidebar / Stats -->
+	<div class="col-span-1 space-y-6">
+		<div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+			<h3 class="mb-4 font-bold text-gray-900">Activity</h3>
+			<div class="space-y-4">
+				<div class="flex items-center gap-3 text-gray-600">
+					<Calendar size={18} />
+					<span>Created {new Date(community?.created_at).toLocaleDateString()}</span>
+				</div>
+				<div class="flex items-center gap-3 text-gray-600">
+					<Info size={18} />
+					<span>{community?.stats?.post_count || 0} posts today</span>
+				</div>
+				<div class="flex items-center gap-3 text-gray-600">
+					<Info size={18} />
+					<span>{community?.stats?.member_count || 0} total members</span>
+				</div>
+			</div>
 		</div>
 	</div>
-{/if}
+</div>

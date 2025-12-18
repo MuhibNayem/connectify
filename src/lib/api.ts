@@ -507,6 +507,7 @@ export type CommunityPrivacy = 'public' | 'closed' | 'secret';
 export interface CommunitySettings {
 	require_post_approval: boolean;
 	require_join_approval: boolean;
+	allow_member_posts?: boolean;
 }
 
 export interface CommunityStats {
@@ -538,6 +539,7 @@ export interface CreateCommunityRequest {
 	privacy: CommunityPrivacy;
 	require_post_approval: boolean;
 	require_join_approval: boolean;
+	allow_member_posts?: boolean;
 }
 
 export interface UpdateCommunityRequest {
@@ -549,6 +551,7 @@ export interface UpdateCommunityRequest {
 	privacy?: CommunityPrivacy;
 	require_post_approval?: boolean;
 	require_join_approval?: boolean;
+	allow_member_posts?: boolean;
 }
 
 export async function createCommunity(data: CreateCommunityRequest): Promise<Community> {
@@ -605,15 +608,21 @@ export async function getCommunityPendingMembers(communityId: string, page = 1, 
 
 
 // Feed API
-export async function getPosts(params: { page?: number; limit?: number; community_id?: string; user_id?: string }): Promise<import('./types').FeedResponse> {
+export async function getPosts(params: { page?: number; limit?: number; community_id?: string; user_id?: string; status?: string; sort?: string }): Promise<import('./types').FeedResponse> {
 	const query = new URLSearchParams();
 	if (params.page) query.set('page', String(params.page));
 	if (params.limit) query.set('limit', String(params.limit));
 	if (params.community_id) query.set('community_id', params.community_id);
 	if (params.user_id) query.set('user_id', params.user_id);
+	if (params.status) query.set('status', params.status);
+	if (params.sort) query.set('sort', params.sort);
 	return apiRequest('GET', `/posts?${query.toString()}`, undefined, true);
 }
 
 export async function createPost(data: FormData | any): Promise<import('./types').Post> {
 	return apiRequest('POST', '/posts', data, true);
+}
+
+export async function updatePostStatus(postId: string, status: 'active' | 'pending' | 'declined'): Promise<void> {
+	return apiRequest('PUT', `/posts/${postId}/status`, { status }, true);
 }

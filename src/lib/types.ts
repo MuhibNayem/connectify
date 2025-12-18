@@ -131,6 +131,7 @@ export interface Post {
 	total_reactions: number;
 	total_comments: number;
 	community_id?: string;
+	status?: 'active' | 'pending' | 'declined';
 }
 
 export interface FeedResponse {

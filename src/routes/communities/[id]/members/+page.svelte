@@ -1,266 +1,123 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
-	import {
-		getCommunityMembers,
-		getCommunityAdmins,
-		getCommunityPendingMembers,
-		approveCommunityMember,
-		rejectCommunityMember,
-		getCommunity,
-		type Community
-	} from '$lib/api';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { Shield, User, Clock, Check, X, Search } from '@lucide/svelte';
-	import type { User as UserType } from '$lib/types';
+	import { getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import { getCommunityMembers, getCommunityAdmins, type Community } from '$lib/api';
+	import type { User } from '$lib/types';
+	import { Search, Settings } from '@lucide/svelte';
 
-	let id = $page.params.id;
-	let community: Community | null = null;
-	let members: UserType[] = [];
-	let admins: UserType[] = [];
-	let pendingMembers: UserType[] = [];
-	let loading = true;
-	let error = '';
+	const communityStore = getContext<Writable<Community>>('community');
+	let community = $derived($communityStore);
+	let members: User[] = $state([]);
+	let loading = $state(true);
+	let activeTab = $state('all'); // all, admins
 
-	let activeTab = 'members'; // members, admins, pending
-
-	async function loadData() {
+	async function loadMembers() {
 		loading = true;
 		try {
-			// Reload community to check permissions (admin status)
-			community = await getCommunity(id);
-
-			const [membersRes, adminsRes] = await Promise.all([
-				getCommunityMembers(id),
-				getCommunityAdmins(id)
-			]);
-
-			members = membersRes.users || [];
-			admins = adminsRes || [];
-
-			if (community?.is_admin && community.settings.require_join_approval) {
-				const pendingRes = await getCommunityPendingMembers(id);
-				pendingMembers = pendingRes.users || [];
+			if (activeTab === 'admins') {
+				const res = await getCommunityAdmins(community.id);
+				members = res || [];
+			} else {
+				const res = await getCommunityMembers(community.id);
+				members = res.users || [];
 			}
-		} catch (e: any) {
+		} catch (e) {
 			console.error(e);
-			error = e.message;
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function handleApprove(userId: string) {
-		try {
-			await approveCommunityMember(id, userId);
-			pendingMembers = pendingMembers.filter((u) => u.id !== userId);
-			// Ideally refresh members list or add locally
-			loadData();
-		} catch (e: any) {
-			alert(e.message);
+	$effect(() => {
+		if (activeTab && community) {
+			loadMembers();
 		}
-	}
-
-	async function handleReject(userId: string) {
-		if (!confirm('Reject this user?')) return;
-		try {
-			await rejectCommunityMember(id, userId);
-			pendingMembers = pendingMembers.filter((u) => u.id !== userId);
-		} catch (e: any) {
-			alert(e.message);
-		}
-	}
-
-	onMount(() => {
-		loadData();
 	});
 </script>
 
-{#if loading && !community}
-	<div class="p-10 text-center">
-		<div
-			class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"
-		></div>
-	</div>
-{:else if error}
-	<div class="rounded-xl bg-red-50 p-4 text-red-600">{error}</div>
-{:else if community}
-	<div class="mx-auto max-w-4xl space-y-6">
-		<div
-			class="flex items-center gap-4 overflow-x-auto border-b border-gray-200 dark:border-gray-700"
-		>
+<div class="min-h-[500px] overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-200">
+	<!-- Header / Tabs -->
+	<div class="border-b border-gray-100 p-4">
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="text-xl font-bold text-gray-900">
+				Members · <span class="text-gray-500">{community?.stats.member_count}</span>
+			</h2>
+			<div class="relative w-64">
+				<Search class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+				<input
+					type="text"
+					placeholder="Find a member"
+					class="w-full rounded-full border border-gray-200 bg-gray-50 py-2 pl-9 pr-4 text-sm text-gray-900 transition-colors focus:border-blue-500 focus:outline-none"
+				/>
+			</div>
+		</div>
+
+		<div class="flex gap-1">
 			<button
-				class="whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab ===
-				'members'
-					? 'border-blue-500 text-blue-600 dark:text-blue-400'
-					: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}"
-				on:click={() => (activeTab = 'members')}
+				class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {activeTab === 'all'
+					? 'bg-gray-100 text-gray-900'
+					: 'text-gray-500 hover:bg-gray-50'}"
+				on:click={() => (activeTab = 'all')}
 			>
-				Members ({members.length})
+				All Members
 			</button>
 			<button
-				class="whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab ===
-				'admins'
-					? 'border-blue-500 text-blue-600 dark:text-blue-400'
-					: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}"
+				class="rounded-lg px-4 py-2 text-sm font-medium transition-colors {activeTab === 'admins'
+					? 'bg-gray-100 text-gray-900'
+					: 'text-gray-500 hover:bg-gray-50'}"
 				on:click={() => (activeTab = 'admins')}
 			>
-				Admins ({admins.length})
+				Admins
 			</button>
-			{#if community.is_admin}
-				<button
-					class="whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab ===
-					'pending'
-						? 'border-blue-500 text-blue-600 dark:text-blue-400'
-						: 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}"
-					on:click={() => (activeTab = 'pending')}
-				>
-					Pending Requests ({pendingMembers.length})
-				</button>
-			{/if}
-		</div>
-
-		<div
-			class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
-		>
-			{#if activeTab === 'members'}
-				<div class="divide-y divide-gray-100 dark:divide-gray-700">
-					{#each members as user}
-						<div
-							class="dark:hover:bg-gray-750 flex items-center justify-between p-4 transition-colors hover:bg-gray-50"
-						>
-							<div class="flex items-center gap-4">
-								<a
-									href={`/users/${user.username}`}
-									class="block h-12 w-12 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700"
-								>
-									{#if user.avatar}
-										<img src={user.avatar} alt={user.username} class="h-full w-full object-cover" />
-									{:else}
-										<div
-											class="flex h-full w-full items-center justify-center text-lg font-bold text-gray-400"
-										>
-											{user.username[0].toUpperCase()}
-										</div>
-									{/if}
-								</a>
-								<div>
-									<a
-										href={`/users/${user.username}`}
-										class="font-bold text-gray-900 hover:underline dark:text-white"
-									>
-										{user.full_name || user.username}
-									</a>
-									<p class="text-xs text-gray-500 dark:text-gray-400">@{user.username}</p>
-								</div>
-							</div>
-
-							{#if community.is_admin && user.id !== auth.user?.id}
-								<!-- Admin Actions for Members (e.g. Kick, Ban - pending impl) -->
-								<div class="group relative">
-									<!-- Placeholder for actions -->
-								</div>
-							{/if}
-						</div>
-					{:else}
-						<div class="p-8 text-center text-gray-500">No members found.</div>
-					{/each}
-				</div>
-			{:else if activeTab === 'admins'}
-				<div class="divide-y divide-gray-100 dark:divide-gray-700">
-					{#each admins as user}
-						<div
-							class="dark:hover:bg-gray-750 flex items-center justify-between p-4 transition-colors hover:bg-gray-50"
-						>
-							<div class="flex items-center gap-4">
-								<a
-									href={`/users/${user.username}`}
-									class="block h-12 w-12 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700"
-								>
-									{#if user.avatar}
-										<img src={user.avatar} alt={user.username} class="h-full w-full object-cover" />
-									{:else}
-										<div
-											class="flex h-full w-full items-center justify-center text-lg font-bold text-gray-400"
-										>
-											{user.username[0].toUpperCase()}
-										</div>
-									{/if}
-								</a>
-								<div>
-									<a
-										href={`/users/${user.username}`}
-										class="font-bold text-gray-900 hover:underline dark:text-white"
-									>
-										{user.full_name || user.username}
-										<span
-											class="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-											>Admin</span
-										>
-									</a>
-									<p class="text-xs text-gray-500 dark:text-gray-400">@{user.username}</p>
-								</div>
-							</div>
-						</div>
-					{:else}
-						<div class="p-8 text-center text-gray-500">No admins found.</div>
-					{/each}
-				</div>
-			{:else if activeTab === 'pending'}
-				<div class="divide-y divide-gray-100 dark:divide-gray-700">
-					{#each pendingMembers as user}
-						<div
-							class="dark:hover:bg-gray-750 flex items-center justify-between p-4 transition-colors hover:bg-gray-50"
-						>
-							<div class="flex items-center gap-4">
-								<a
-									href={`/users/${user.username}`}
-									class="block h-12 w-12 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700"
-								>
-									{#if user.avatar}
-										<img src={user.avatar} alt={user.username} class="h-full w-full object-cover" />
-									{:else}
-										<div
-											class="flex h-full w-full items-center justify-center text-lg font-bold text-gray-400"
-										>
-											{user.username[0].toUpperCase()}
-										</div>
-									{/if}
-								</a>
-								<div>
-									<a
-										href={`/users/${user.username}`}
-										class="font-bold text-gray-900 hover:underline dark:text-white"
-									>
-										{user.full_name || user.username}
-									</a>
-									<p class="text-xs text-gray-500 dark:text-gray-400">@{user.username}</p>
-									<p class="mt-1 text-xs text-gray-400">Requested to join</p>
-								</div>
-							</div>
-
-							<div class="flex items-center gap-2">
-								<button
-									on:click={() => handleApprove(user.id)}
-									class="rounded-lg bg-green-100 p-2 text-green-600 transition-colors hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40"
-									title="Approve"
-								>
-									<Check class="h-5 w-5" />
-								</button>
-								<button
-									on:click={() => handleReject(user.id)}
-									class="rounded-lg bg-red-100 p-2 text-red-600 transition-colors hover:bg-red-200 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40"
-									title="Reject"
-								>
-									<X class="h-5 w-5" />
-								</button>
-							</div>
-						</div>
-					{:else}
-						<div class="p-8 text-center text-gray-500">No pending requests.</div>
-					{/each}
-				</div>
-			{/if}
 		</div>
 	</div>
-{/if}
+
+	<!-- List -->
+	<div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+		{#if loading}
+			{#each Array(6) as _}
+				<div
+					class="flex animate-pulse items-center gap-4 rounded-xl border border-gray-100 bg-white p-4"
+				>
+					<div class="h-12 w-12 rounded-full bg-gray-200"></div>
+					<div class="flex-1 space-y-2">
+						<div class="h-4 w-1/2 rounded bg-gray-200"></div>
+						<div class="h-3 w-1/3 rounded bg-gray-100"></div>
+					</div>
+				</div>
+			{/each}
+		{:else if members.length > 0}
+			{#each members as member}
+				<div
+					class="group flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 transition-colors hover:border-gray-200 hover:bg-gray-50"
+				>
+					<img
+						src={member.avatar ||
+							`https://ui-avatars.com/api/?name=${member.full_name || member.username}`}
+						alt={member.username}
+						class="h-14 w-14 rounded-full object-cover"
+					/>
+					<div class="min-w-0 flex-1">
+						<h3 class="truncate font-semibold text-gray-900">
+							{member.full_name || member.username}
+						</h3>
+						<p class="truncate text-xs text-gray-500">@{member.username}</p>
+						<!-- Add Joined date if available -->
+					</div>
+
+					<!-- Actions (if admin viewing) -->
+					{#if community.is_admin && member.id !== community.creator_id}
+						<!-- Simplistic admin actions -->
+						<button
+							class="rounded-lg p-2 text-gray-400 opacity-0 transition-opacity hover:bg-gray-200 hover:text-gray-700 group-hover:opacity-100"
+						>
+							<Settings size={18} />
+						</button>
+					{/if}
+				</div>
+			{/each}
+		{:else}
+			<div class="col-span-full py-12 text-center text-gray-500">No members found.</div>
+		{/if}
+	</div>
+</div>
