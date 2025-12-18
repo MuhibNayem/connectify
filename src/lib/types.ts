@@ -23,6 +23,7 @@ export interface Message {
 	edited_at?: string; // Added
 	reactions?: Reaction[];
 	reply_to_message_id?: string; // Added
+	product_id?: string; // Added for marketplace
 	created_at: string;
 	updated_at?: string;
 	// E2EE

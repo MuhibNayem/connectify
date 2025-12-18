@@ -42,6 +42,7 @@ export interface MessageRequest {
 	content_type: string;
 	media_urls?: string[];
 	reply_to_message_id?: string;
+	product_id?: string;
 }
 
 export interface MessageResponse {
