@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import Skeleton from '$lib/components/ui/skeleton/Skeleton.svelte';
 	import * as Icons from '@lucide/svelte';
 	import { getMarketplaceConversations, getProduct } from '$lib/api/marketplace';
 	import { getUserByID, type ConversationSummary } from '$lib/api';
@@ -235,7 +236,17 @@
 		<!-- Conversation List -->
 		<div class="flex-1 overflow-y-auto">
 			{#if loadingConversations}
-				<div class="p-4 text-center text-gray-500">Loading chats...</div>
+				<div class="space-y-3 p-4">
+					{#each Array(5) as _, i (i)}
+						<div class="flex items-center space-x-3">
+							<Skeleton class="h-12 w-12 rounded-full" />
+							<div class="flex-1 space-y-2">
+								<Skeleton class="h-4 w-3/4" />
+								<Skeleton class="h-4 w-1/2" />
+							</div>
+						</div>
+					{/each}
+				</div>
 			{:else if conversations.length === 0}
 				<div class="p-8 text-center text-gray-500">
 					<Icons.MessageSquare size={32} class="mx-auto mb-2 opacity-50" />
