@@ -449,6 +449,7 @@
 				messageContent={message.content || ''}
 				messageSenderId={message.sender_id}
 				messageCreatedAt={message.created_at}
+				{conversationId}
 				onEdited={(newContent) => (message.content = newContent)}
 				on:deleted={() => dispatch('deleted', { id: message.id })}
 			/>

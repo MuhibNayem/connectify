@@ -117,7 +117,7 @@
 
 		if (sellerId && productId) {
 			// Select the conversation with this seller
-			selectedConversationId = `user-${sellerId}`;
+			selectedConversationId = `${sellerId}`;
 
 			// Check if this seller is already in our conversation list
 			const existingConv = conversations.find((c) => c.id === sellerId);
@@ -264,10 +264,10 @@
 					{#each conversations as conv}
 						<button
 							class="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-gray-50 {selectedConversationId ===
-							`user-${conv.id}`
+							conv.id
 								? 'bg-blue-50'
 								: ''}"
-							onclick={() => (selectedConversationId = `user-${conv.id}`)}
+							onclick={() => (selectedConversationId = conv.id)}
 						>
 							<div class="relative">
 								<img

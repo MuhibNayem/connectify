@@ -6,6 +6,7 @@ export interface Reaction {
 
 export interface Message {
 	id: string;
+	string_id?: string; // Mapped from Cassandra UUID
 	sender_id: string;
 	sender_name?: string;
 	receiver_id?: string;

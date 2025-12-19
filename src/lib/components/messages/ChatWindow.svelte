@@ -501,7 +501,7 @@ It orchestrates the display of messages and the message input field.
 			deliveredDebounceTimer = setTimeout(async () => {
 				if (deliveredQueue.size > 0) {
 					try {
-						await markMessagesAsDelivered(Array.from(deliveredQueue));
+						await markMessagesAsDelivered(conversationId, Array.from(deliveredQueue));
 						console.log(
 							'markMessagesAsDelivered API call successful for IDs:',
 							Array.from(deliveredQueue)
@@ -535,10 +535,11 @@ It orchestrates the display of messages and the message input field.
 			const partner = summaries.find((s) => s.id === id && s.is_group === (type === 'group'));
 			if (partner) {
 				conversationPartner = partner;
-			} else if (type === 'user') {
+			} else if (type === 'user' && id) {
 				// Partner not found in summaries (might be non-friend marketplace seller)
 				// Fetch user info directly
 				const { getUserByID } = await import('$lib/api');
+
 				const user = await getUserByID(id);
 				if (user) {
 					conversationPartner = {
@@ -552,8 +553,9 @@ It orchestrates the display of messages and the message input field.
 			}
 
 			// E2EE: Fetch Public Key if available
-			if (type === 'user') {
-				const { getUserByID } = await import('$lib/api'); // Dynamic import to avoid circular dependency if any
+			if (type === 'user' && id) {
+				const { getUserByID } = await import('$lib/api');
+
 				const user = await getUserByID(id);
 
 				// Only enable encryption if the user has keys AND has explicitly enabled it
@@ -596,16 +598,19 @@ It orchestrates the display of messages and the message input field.
 			let params: {
 				receiverID?: string;
 				groupID?: string;
+				conversationID?: string;
 				page: number;
 				limit: number;
 				marketplace?: boolean;
 			} = {
 				page: pageNum,
-				limit: limit,
+				limit: 50,
 				marketplace: isMarketplace
 			};
 
-			if (type === 'group') {
+			if (id.startsWith('dm_')) {
+				params.conversationID = id;
+			} else if (type === 'group') {
 				params.groupID = id;
 			} else if (type === 'user') {
 				params.receiverID = id;
@@ -619,6 +624,7 @@ It orchestrates the display of messages and the message input field.
 				const newMessages = response.messages
 					.map((msg: any) => ({
 						...msg,
+						id: msg.string_id || msg.id, // Use Cassandra UUID if available
 						seen_by: msg.seen_by || [],
 						delivered_to: msg.delivered_to || []
 					}))
@@ -800,7 +806,8 @@ It orchestrates the display of messages and the message input field.
 				if (type === 'group') {
 					formData.append('group_id', id);
 				} else {
-					formData.append('receiver_id', id);
+					// Fix: Use actual partner ID
+					formData.append('receiver_id', conversationPartner?.id || id);
 				}
 
 				files.forEach((file) => {
@@ -823,7 +830,8 @@ It orchestrates the display of messages and the message input field.
 				if (type === 'group') {
 					payload['group_id'] = id;
 				} else {
-					payload['receiver_id'] = id;
+					// Fix: Use the actual partner ID, not the conversation ID (which might be dm_...)
+					payload['receiver_id'] = conversationPartner?.id || id;
 				}
 
 				// Marketplace context: always send is_marketplace flag
@@ -1137,7 +1145,7 @@ It orchestrates the display of messages and the message input field.
 					if (type === 'group' && conversation_id === conversationId) {
 						isRelevant = true;
 					} else if (type === 'user' && user_id === currentChatId) {
-						// For DMs, the conversation_id sent is 'user-MY_ID' (targeted at me).
+						// For DMs, the conversation_id sent is 'MY_ID' (targeted at me).
 						// We care if the SENDER (user_id) is the person we are currently looking at.
 						isRelevant = true;
 					}
@@ -1159,16 +1167,36 @@ It orchestrates the display of messages and the message input field.
 	});
 
 	let seenDebounceTimer: any;
+	let seenQueue = new Set<string>();
+
 	function handleMessageVisible(message: any) {
 		// Only mark messages as seen if they are NOT from the current user
 		if (message.sender_id === auth.state.user?.id) return;
 
+		// Add to queue
+		seenQueue.add(message.id);
+
 		clearTimeout(seenDebounceTimer);
-		seenDebounceTimer = setTimeout(() => {
+		seenDebounceTimer = setTimeout(async () => {
 			const [type, id] = conversationId.split('-');
-			// Use current time to mark ALL messages in the conversation as seen up to now
+
+			// 1. Mark individual messages as seen (for read receipts)
+			if (seenQueue.size > 0) {
+				const ids = Array.from(seenQueue);
+				try {
+					await markMessagesAsSeen(conversationId, ids);
+					// Locally update message status if needed?
+					// The websocket event will handle it usually, but we could do optimistic update.
+				} catch (e) {
+					console.error('Failed to mark messages as seen:', e);
+				}
+				seenQueue.clear();
+			}
+
+			// 2. Mark conversation as seen (to reset unread count)
+			// We can do this less frequently or just once per batch.
 			markConversationAsSeen(conversationId, new Date().toISOString(), type === 'group');
-		}, 500);
+		}, 1000); // 1s debounce
 	}
 
 	function handleMessageDeleted(event: CustomEvent) {

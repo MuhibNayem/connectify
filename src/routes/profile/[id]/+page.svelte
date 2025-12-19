@@ -403,6 +403,19 @@
 			addingMedia = false;
 		}
 	}
+	import { goto } from '$app/navigation';
+
+	// Replicate backend logic for deterministic Conversation ID
+	function getConversationId(id1: string, id2: string) {
+		const sorted = [id1, id2].sort();
+		return `dm_${sorted[0]}_${sorted[1]}`;
+	}
+
+	async function handleMessage() {
+		if (!auth.state.user?.id || !user?.id) return;
+		const convId = getConversationId(auth.state.user.id, user.id);
+		await goto(`/messages/${convId}`);
+	}
 </script>
 
 {#if loadingUser}
@@ -560,10 +573,11 @@
 								<Button variant="secondary" disabled>Request Sent</Button>
 							{:else if friendshipStatus === 'friends'}
 								<Button variant="secondary">Friends</Button>
+								<!-- Message Button (Only for friends) -->
+								<Button variant="secondary" onclick={handleMessage}>Message</Button>
 							{:else if friendshipStatus === 'blocked'}
 								<Button variant="destructive" disabled>Blocked</Button>
 							{/if}
-							<Button variant="secondary">Message</Button>
 						{:else}
 							<Button variant="secondary" class="bg-secondary/50 font-semibold" href="/settings">
 								<div class="mr-2">✏️</div>

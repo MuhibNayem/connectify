@@ -5,16 +5,27 @@ Fetches friends and groups to populate the list.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { getConversationSummaries, type ConversationSummary } from '$lib/api';
+	import {
+		getConversationSummaries,
+		getFriends,
+		searchFriends,
+		type ConversationSummary,
+		type User
+	} from '$lib/api';
 	import { auth } from '$lib/stores/auth.svelte';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import { presenceStore, type PresenceState } from '$lib/stores/presence';
 	import { formatDistanceToNow } from 'date-fns';
 	import CreateGroupModal from './CreateGroupModal.svelte';
-	import { Plus } from '@lucide/svelte';
+	import { Plus, Search, MessageCircle } from '@lucide/svelte';
 	import { websocketMessages } from '$lib/websocket';
 
 	let conversations = $state<ConversationSummary[]>([]);
+	let suggestedFriends = $state<User[]>([]); // Prefetched friends
+	let searchResults = $state<User[]>([]);
+	let searchQuery = $state('');
+	let isSearching = $state(false);
+
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 	let showCreateGroupModal = $state(false);
@@ -93,6 +104,12 @@ Fetches friends and groups to populate the list.
 								: 0;
 							return timeB - timeA;
 						});
+					} else {
+						// New conversation started (or message from new person)
+						console.log('[ConversationList] New conversation detected, refreshing list...');
+						// Debounce refresh to avoid storm if many messages come in?
+						// For now, simple re-fetch.
+						refreshConversations();
 					}
 					break;
 				}
@@ -138,29 +155,7 @@ Fetches friends and groups to populate the list.
 		});
 
 		// Async Data Fetching
-		(async () => {
-			if (!auth.state.user) {
-				error = 'User not authenticated.';
-				isLoading = false;
-				return;
-			}
-
-			try {
-				const fetchedConversations = await getConversationSummaries();
-
-				// Sort conversations by timestamp of last message (newest first)
-				const sorted = fetchedConversations.sort((a, b) => {
-					const timeA = a.last_message_timestamp ? new Date(a.last_message_timestamp).getTime() : 0;
-					const timeB = b.last_message_timestamp ? new Date(b.last_message_timestamp).getTime() : 0;
-					return timeB - timeA;
-				});
-				conversations = sorted;
-			} catch (e: any) {
-				error = e.message || 'Failed to load conversations.';
-			} finally {
-				isLoading = false;
-			}
-		})();
+		refreshConversations();
 
 		// Return cleanup function
 		return () => {
@@ -169,9 +164,66 @@ Fetches friends and groups to populate the list.
 		};
 	});
 
+	async function refreshConversations() {
+		if (!auth.state.user) {
+			error = 'User not authenticated.';
+			isLoading = false;
+			return;
+		}
+
+		try {
+			const fetchedConversations = await getConversationSummaries();
+
+			// Handle empty list or null
+			const validConversations = fetchedConversations || [];
+
+			// Sort conversations by timestamp of last message (newest first)
+			const sorted = validConversations.sort((a, b) => {
+				const timeA = a.last_message_timestamp ? new Date(a.last_message_timestamp).getTime() : 0;
+				const timeB = b.last_message_timestamp ? new Date(b.last_message_timestamp).getTime() : 0;
+				return timeB - timeA;
+			});
+			conversations = sorted;
+
+			// Prefetch friends (as requested "pre fetched some friends")
+			try {
+				suggestedFriends = await getFriends();
+			} catch (friendErr) {
+				console.log('Failed to prefetch friends', friendErr);
+			}
+		} catch (e: any) {
+			error = e.message || 'Failed to load conversations.';
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function handleSearch() {
+		if (searchQuery.trim().length === 0) {
+			searchResults = [];
+			return;
+		}
+		isSearching = true;
+		try {
+			searchResults = await searchFriends(searchQuery);
+		} catch (err) {
+			console.error('Search failed', err);
+		} finally {
+			isSearching = false;
+		}
+	}
+
+	let searchTimeout: NodeJS.Timeout;
+	function onSearchInput() {
+		clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
+			handleSearch();
+		}, 300);
+	}
+
 	function getConversationUrl(conv: ConversationSummary): string {
-		const typePrefix = conv.is_group ? 'group' : 'user';
-		return `/messages/${typePrefix}-${conv.id}`;
+		// Backend now returns IDs with prefix: "user-<id>" or "group-<id>"
+		return `/messages/${conv.id}`;
 	}
 
 	// Helper to display encrypted message placeholder
@@ -189,17 +241,31 @@ Fetches friends and groups to populate the list.
 
 <div class="flex h-full flex-col border-r border-gray-200 bg-gray-50">
 	<!-- Header -->
-	<div class="flex items-center justify-between border-b border-gray-200 p-4">
-		<h1 class="text-xl font-bold text-gray-800">Chats</h1>
-		<button
-			class="rounded-full bg-blue-500 p-2 text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-			on:click={() => (showCreateGroupModal = true)}
-		>
-			<Plus class="h-6 w-6" />
-		</button>
+	<div class="flex flex-col space-y-3 border-b border-gray-200 p-4">
+		<div class="flex items-center justify-between">
+			<h1 class="text-xl font-bold text-gray-800">Chats</h1>
+			<button
+				class="rounded-full bg-blue-500 p-2 text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+				on:click={() => (showCreateGroupModal = true)}
+			>
+				<Plus class="h-6 w-6" />
+			</button>
+		</div>
+
+		<!-- Search Bar -->
+		<div class="relative">
+			<input
+				type="text"
+				placeholder="Search friends..."
+				class="w-full rounded-lg border border-gray-300 px-4 py-2 pl-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+				bind:value={searchQuery}
+				on:input={onSearchInput}
+			/>
+			<Search class="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+		</div>
 	</div>
 
-	<!-- Conversation List -->
+	<!-- Conversation List or Search Results -->
 	<div class="flex-1 overflow-y-auto">
 		{#if isLoading}
 			<div class="space-y-3 p-4">
@@ -215,8 +281,91 @@ Fetches friends and groups to populate the list.
 			</div>
 		{:else if error}
 			<div class="p-4 text-red-500">{error}</div>
+		{:else if searchQuery.length > 0}
+			<!-- Search Results -->
+			<div class="bg-gray-50 px-4 py-2 text-xs font-semibold uppercase text-gray-500">
+				{searchResults.length > 0
+					? 'Friends Found'
+					: isSearching
+						? 'Searching...'
+						: 'No friends found'}
+			</div>
+			<ul class="divide-y divide-gray-200">
+				{#each searchResults as friend}
+					<li>
+						<a
+							href="/messages/{friend.id}"
+							class="flex items-center p-3 transition hover:bg-gray-100"
+						>
+							<div class="relative">
+								<img
+									class="mr-4 h-10 w-10 rounded-full object-cover"
+									src={friend.avatar || `https://i.pravatar.cc/150?u=${friend.id}`}
+									alt={friend.full_name}
+								/>
+								{#if presenceState[friend.id]?.status === 'online'}
+									<span
+										class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500"
+									></span>
+								{/if}
+							</div>
+							<div>
+								<p class="font-medium text-gray-900">{friend.full_name || friend.username}</p>
+								<p class="text-xs text-gray-500">@{friend.username}</p>
+							</div>
+						</a>
+					</li>
+				{/each}
+			</ul>
 		{:else if conversations.length === 0}
-			<div class="p-4 text-center text-gray-500">No conversations yet.</div>
+			<!-- Empty State + Prefetched Friends -->
+			<div class="px-4 py-8 text-center">
+				<div
+					class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100"
+				>
+					<MessageCircle class="h-8 w-8 text-blue-600" />
+				</div>
+				<h3 class="mb-2 text-lg font-medium text-gray-900">Your Inbox is Empty</h3>
+				<p class="mb-6 text-sm text-gray-500">Start chatting with your friends!</p>
+			</div>
+
+			{#if suggestedFriends.length > 0}
+				<div class="px-4 pb-2">
+					<h4 class="mb-2 text-xs font-semibold uppercase text-gray-400">Your Friends</h4>
+				</div>
+				<ul class="divide-y divide-gray-100">
+					{#each suggestedFriends as friend}
+						<li>
+							<a
+								href="/messages/{friend.id}"
+								class="flex items-center space-x-3 px-4 py-3 transition hover:bg-gray-50"
+							>
+								<div class="relative">
+									<img
+										src={friend.avatar || `https://i.pravatar.cc/150?u=${friend.id}`}
+										alt={friend.full_name}
+										class="h-10 w-10 rounded-full object-cover"
+									/>
+									{#if presenceState[friend.id]?.status === 'online'}
+										<span
+											class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500"
+										></span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									<p class="truncate font-medium text-gray-900">
+										{friend.full_name || friend.username}
+									</p>
+									<p class="truncate text-xs text-gray-500">@{friend.username}</p>
+								</div>
+								<div class="flex-shrink-0">
+									<MessageCircle class="h-5 w-5 text-gray-400" />
+								</div>
+							</a>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		{:else}
 			<ul class="divide-y divide-gray-200">
 				{#each conversations as conv (conv.id)}

@@ -320,10 +320,11 @@ export async function getUserGroups(): Promise<GroupResponse[]> {
 	return apiRequest('GET', '/groups', undefined, true);
 }
 
-export async function getMessages(params: { receiverID?: string; groupID?: string; page?: number; limit?: number; before?: string; marketplace?: boolean }): Promise<MessageResponse> {
+export async function getMessages(params: { receiverID?: string; groupID?: string; conversationID?: string; page?: number; limit?: number; before?: string; marketplace?: boolean }): Promise<MessageResponse> {
 	const query = new URLSearchParams();
 	if (params.receiverID) query.set('receiverID', params.receiverID);
 	if (params.groupID) query.set('groupID', params.groupID);
+	if (params.conversationID) query.set('conversationID', params.conversationID);
 	if (params.page) query.set('page', String(params.page));
 	if (params.limit) query.set('limit', String(params.limit));
 	if (params.before) query.set('before', params.before);
@@ -336,20 +337,20 @@ export async function sendMessage(payload: MessageRequest | FormData): Promise<M
 	return apiRequest('POST', '/messages', payload, true);
 }
 
-export async function markMessagesAsSeen(messageIds: string[]): Promise<void> {
-	await apiRequest('POST', '/messages/seen', messageIds, true);
+export async function markMessagesAsSeen(conversationId: string, messageIds: string[]): Promise<void> {
+	await apiRequest('POST', '/messages/seen', { conversation_id: conversationId, message_ids: messageIds }, true);
 }
 
-export async function markMessagesAsDelivered(messageIds: string[]): Promise<void> {
-	await apiRequest('POST', '/messages/delivered', messageIds, true);
+export async function markMessagesAsDelivered(conversationId: string, messageIds: string[]): Promise<void> {
+	await apiRequest('POST', '/messages/delivered', { conversation_id: conversationId, message_ids: messageIds }, true);
 }
 
 export async function getUnreadMessageCount(): Promise<UnreadCountResponse> {
 	return apiRequest('GET', '/messages/unread', undefined, true);
 }
 
-export async function deleteMessage(messageId: string): Promise<SuccessResponse> {
-	return apiRequest('DELETE', `/messages/${messageId}`, undefined, true);
+export async function deleteMessage(messageId: string, conversationId: string): Promise<SuccessResponse> {
+	return apiRequest('DELETE', `/messages/${messageId}?conversation_id=${conversationId}`, undefined, true);
 }
 
 export async function editMessage(messageId: string, content: string): Promise<Message> {
@@ -632,4 +633,103 @@ export async function createPost(data: FormData | any): Promise<import('./types'
 
 export async function updatePostStatus(postId: string, status: 'active' | 'pending' | 'declined'): Promise<void> {
 	return apiRequest('PUT', `/posts/${postId}/status`, { status }, true);
+}
+
+// --- Event Types & APIs ---
+
+export type EventPrivacy = 'public' | 'private' | 'friends';
+export type RSVPStatus = 'going' | 'interested' | 'invited' | 'not_going';
+
+export interface EventStats {
+	going_count: number;
+	interested_count: number;
+	invited_count: number;
+	share_count: number;
+}
+
+export interface Event {
+	id: string;
+	title: string;
+	description: string;
+	start_date: string; // ISO Date
+	end_date?: string; // ISO Date
+	location: string;
+	is_online: boolean;
+	privacy: EventPrivacy;
+	category: string;
+	cover_image: string;
+	creator: UserShortResponse;
+	stats: EventStats;
+	my_status?: RSVPStatus;
+	is_host: boolean;
+	created_at: string;
+}
+
+export interface CreateEventRequest {
+	title: string;
+	description: string;
+	start_date: string;
+	end_date?: string;
+	location?: string;
+	is_online: boolean;
+	privacy: EventPrivacy;
+	category?: string;
+	cover_image?: string;
+}
+
+export interface UpdateEventRequest {
+	title?: string;
+	description?: string;
+	start_date?: string;
+	end_date?: string;
+	location?: string;
+	is_online?: boolean;
+	privacy?: EventPrivacy;
+	category?: string;
+	cover_image?: string;
+}
+
+// APIs
+
+export async function createEvent(data: CreateEventRequest): Promise<Event> {
+	return apiRequest<Event>('/events', {
+		method: 'POST',
+		body: JSON.stringify(data)
+	});
+}
+
+export async function getEvents(page = 1, limit = 10): Promise<{ events: Event[]; total: number }> {
+	return apiRequest<{ events: Event[]; total: number }>(`/events?page=${page}&limit=${limit}`);
+}
+
+export async function getMyEvents(page = 1, limit = 10): Promise<Event[]> {
+	return apiRequest<Event[]>(`/events/my-events?page=${page}&limit=${limit}`);
+}
+
+export async function getBirthdays(): Promise<BirthdayResponse> {
+	return apiRequest<BirthdayResponse>('/events/birthdays');
+}
+
+export async function getEvent(id: string): Promise<Event> {
+	return apiRequest<Event>(`/events/${id}`);
+}
+
+export async function updateEvent(id: string, data: UpdateEventRequest): Promise<Event> {
+	return apiRequest<Event>(`/events/${id}`, {
+		method: 'PUT',
+		body: JSON.stringify(data)
+	});
+}
+
+export async function deleteEvent(id: string): Promise<void> {
+	return apiRequest<void>(`/events/${id}`, {
+		method: 'DELETE'
+	});
+}
+
+export async function rsvpEvent(id: string, status: RSVPStatus): Promise<void> {
+	return apiRequest<void>(`/events/${id}/rsvp`, {
+		method: 'POST',
+		body: JSON.stringify({ status })
+	});
 }
