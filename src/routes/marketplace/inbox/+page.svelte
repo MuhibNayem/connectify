@@ -116,11 +116,13 @@
 		const productTitle = $page.url.searchParams.get('product_title');
 
 		if (sellerId && productId) {
-			// Select the conversation with this seller
-			selectedConversationId = `${sellerId}`;
+			// Select the conversation with this seller (with user- prefix for ChatWindow)
+			const prefixedSellerId = sellerId.startsWith('user-') ? sellerId : `user-${sellerId}`;
+			selectedConversationId = prefixedSellerId;
 
-			// Check if this seller is already in our conversation list
-			const existingConv = conversations.find((c) => c.id === sellerId);
+			// Check if this seller is already in our conversation list (raw ID comparison)
+			const rawSellerId = sellerId.startsWith('user-') ? sellerId.slice(5) : sellerId;
+			const existingConv = conversations.find((c) => c.id === rawSellerId || c.id === sellerId);
 
 			if (!existingConv) {
 				// Create a placeholder conversation for this seller
@@ -262,12 +264,13 @@
 			{:else}
 				<ul class="divide-y divide-gray-100">
 					{#each conversations as conv}
+						{@const convId = conv.id.startsWith('user-') ? conv.id : `user-${conv.id}`}
 						<button
 							class="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-gray-50 {selectedConversationId ===
-							conv.id
+							convId
 								? 'bg-blue-50'
 								: ''}"
-							onclick={() => (selectedConversationId = conv.id)}
+							onclick={() => (selectedConversationId = convId)}
 						>
 							<div class="relative">
 								<img

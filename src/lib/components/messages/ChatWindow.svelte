@@ -7,6 +7,7 @@ It orchestrates the display of messages and the message input field.
 		getMessages,
 		sendMessage,
 		markMessagesAsDelivered,
+		markMessagesAsSeen,
 		getConversationSummaries,
 		type ConversationSummary,
 		markConversationAsSeen,
@@ -532,7 +533,7 @@ It orchestrates the display of messages and the message input field.
 		try {
 			const summaries = await getConversationSummaries();
 			const [type, id] = conversationId.split('-');
-			const partner = summaries.find((s) => s.id === id && s.is_group === (type === 'group'));
+			const partner = summaries.find((s) => s.id === conversationId);
 			if (partner) {
 				conversationPartner = partner;
 			} else if (type === 'user' && id) {
@@ -594,7 +595,16 @@ It orchestrates the display of messages and the message input field.
 		}
 
 		try {
+			// Guard against undefined conversationId (e.g., empty inbox)
+			if (!conversationId) {
+				isLoading = false;
+				return;
+			}
 			const [type, id] = conversationId.split('-');
+			if (!type || !id) {
+				isLoading = false;
+				return;
+			}
 			let params: {
 				receiverID?: string;
 				groupID?: string;
@@ -806,8 +816,8 @@ It orchestrates the display of messages and the message input field.
 				if (type === 'group') {
 					formData.append('group_id', id);
 				} else {
-					// Fix: Use actual partner ID
-					formData.append('receiver_id', conversationPartner?.id || id);
+					// Use raw ID from conversationId split (id is already without prefix)
+					formData.append('receiver_id', id);
 				}
 
 				files.forEach((file) => {
@@ -830,8 +840,8 @@ It orchestrates the display of messages and the message input field.
 				if (type === 'group') {
 					payload['group_id'] = id;
 				} else {
-					// Fix: Use the actual partner ID, not the conversation ID (which might be dm_...)
-					payload['receiver_id'] = conversationPartner?.id || id;
+					// Use raw ID from conversationId split (id is already without prefix)
+					payload['receiver_id'] = id;
 				}
 
 				// Marketplace context: always send is_marketplace flag

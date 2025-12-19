@@ -5,6 +5,7 @@ Fetches friends and groups to populate the list.
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import {
 		getConversationSummaries,
 		getFriends,
@@ -65,12 +66,21 @@ Fetches friends and groups to populate the list.
 					conversations = conversations.map((conv) => {
 						let shouldUpdate = false;
 
+						// Extract raw ID from prefixed conv.id for comparison
+						// conv.id is "user-xxx" or "group-xxx", extract the raw ID
+						const convRawId = conv.id.includes('-')
+							? conv.id.split('-').slice(1).join('-')
+							: conv.id;
+
 						// Check if message belongs to this conversation
-						if (conv.is_group && newMessage.group_id === conv.id) {
+						if (
+							conv.is_group &&
+							(`group-${newMessage.group_id}` === conv.id || newMessage.group_id === convRawId)
+						) {
 							shouldUpdate = true;
 						} else if (!conv.is_group && !newMessage.group_id) {
-							// For direct messages, check if either sender or receiver is this conversation
-							if (newMessage.sender_id === conv.id || newMessage.receiver_id === conv.id) {
+							// For direct messages, check if either sender or receiver matches
+							if (newMessage.sender_id === convRawId || newMessage.receiver_id === convRawId) {
 								shouldUpdate = true;
 							}
 						}
@@ -105,11 +115,32 @@ Fetches friends and groups to populate the list.
 							return timeB - timeA;
 						});
 					} else {
-						// New conversation started (or message from new person)
-						console.log('[ConversationList] New conversation detected, refreshing list...');
-						// Debounce refresh to avoid storm if many messages come in?
-						// For now, simple re-fetch.
-						refreshConversations();
+						// New conversation started - optimistically add it
+						const isSentByMe = newMessage.sender_id === auth.state.user?.id;
+						const partnerId = isSentByMe ? newMessage.receiver_id : newMessage.sender_id;
+
+						// Try to find partner info from suggestedFriends (already loaded)
+						const partnerInfo = suggestedFriends.find((f) => f.id === partnerId);
+
+						const newConv: ConversationSummary = {
+							id: `user-${partnerId}`,
+							name:
+								partnerInfo?.username ||
+								partnerInfo?.full_name ||
+								(isSentByMe ? newMessage.receiver_name : newMessage.sender_name) ||
+								'Chat',
+							avatar:
+								partnerInfo?.avatar ||
+								(isSentByMe ? newMessage.receiver_avatar : newMessage.sender_avatar) ||
+								'',
+							is_group: false,
+							last_message_content: newMessage.content || 'Sent a file',
+							last_message_timestamp: newMessage.created_at,
+							last_message_sender_id: newMessage.sender_id,
+							last_message_sender_name: newMessage.sender_name,
+							unread_count: newMessage.sender_id !== auth.state.user?.id ? 1 : 0
+						};
+						conversations = [newConv, ...conversations];
 					}
 					break;
 				}
@@ -137,13 +168,15 @@ Fetches friends and groups to populate the list.
 				}
 				case 'GROUP_CREATED': {
 					const newGroup = event.data;
-					if (!conversations.some((c) => c.id === newGroup.id)) {
+					if (!conversations.some((c) => c.id === `group-${newGroup.id}`)) {
 						const newConversation: ConversationSummary = {
-							id: newGroup.id,
+							id: `group-${newGroup.id}`,
 							name: newGroup.name,
 							avatar: newGroup.avatar,
 							is_group: true,
-							last_message_content: 'Group created',
+							last_message_content: newGroup.creator?.username
+								? `${newGroup.creator.username} created the group`
+								: 'Group created',
 							last_message_timestamp: newGroup.created_at,
 							unread_count: 0
 						};
@@ -335,10 +368,13 @@ Fetches friends and groups to populate the list.
 				</div>
 				<ul class="divide-y divide-gray-100">
 					{#each suggestedFriends as friend}
+						{@const isActive = $page.params.id === `user-${friend.id}`}
 						<li>
 							<a
-								href="/messages/{friend.id}"
-								class="flex items-center space-x-3 px-4 py-3 transition hover:bg-gray-50"
+								href="/messages/user-{friend.id}"
+								class="flex items-center space-x-3 px-4 py-3 transition {isActive
+									? 'border-l-4 border-blue-500 bg-blue-50'
+									: 'hover:bg-gray-50'}"
 							>
 								<div class="relative">
 									<img
@@ -442,9 +478,22 @@ Fetches friends and groups to populate the list.
 
 	<CreateGroupModal
 		bind:showModal={showCreateGroupModal}
-		onGroupCreated={() => {
-			// Reload conversations
-			window.location.reload(); // Simple reload for now or re-fetch
+		onGroupCreated={(createdGroup) => {
+			// Optimistic update: Add group directly to list (zero extra API calls)
+			const newConversation: ConversationSummary = {
+				id: `group-${createdGroup.id}`,
+				name: createdGroup.name,
+				avatar: createdGroup.avatar,
+				is_group: true,
+				last_message_content: createdGroup.creator?.username
+					? `${createdGroup.creator.username} created the group`
+					: 'Group created',
+				last_message_timestamp: createdGroup.created_at,
+				unread_count: 0
+			};
+			conversations = [newConversation, ...conversations];
+			// Auto-navigate to the newly created group
+			goto(`/messages/${newConversation.id}`);
 		}}
 	/>
 </div>
