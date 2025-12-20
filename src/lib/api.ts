@@ -139,6 +139,38 @@ export interface ErrorResponse {
 	error: string;
 }
 
+// Privacy settings type
+export type PrivacyType = 'PUBLIC' | 'FRIENDS' | 'ONLY_ME' | 'FRIENDS_OF_FRIENDS' | 'CUSTOM';
+
+// Album types
+export type AlbumType = 'custom' | 'profile' | 'cover' | 'timeline';
+
+export interface Album {
+	id: string;
+	user_id: string;
+	name: string;
+	description?: string;
+	type: AlbumType;
+	cover_url?: string;
+	post_ids: string[];
+	privacy: PrivacyType;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface CreateAlbumRequest {
+	name: string;
+	description?: string;
+	privacy?: PrivacyType;
+}
+
+export interface UpdateAlbumRequest {
+	name?: string;
+	description?: string;
+	cover_url?: string;
+	privacy?: PrivacyType;
+}
+
 export interface UnreadCountResponse {
 	count: number;
 }
@@ -734,4 +766,32 @@ export async function deleteEvent(id: string): Promise<void> {
 
 export async function rsvpEvent(id: string, status: RSVPStatus): Promise<void> {
 	return apiRequest<void>('POST', `/events/${id}/rsvp`, { status });
+}
+
+// --- Album API Functions ---
+
+export async function createAlbum(data: CreateAlbumRequest): Promise<Album> {
+	return apiRequest('POST', '/albums', data);
+}
+
+export async function getAlbum(albumId: string): Promise<Album> {
+	return apiRequest('GET', `/albums/${albumId}`);
+}
+
+export async function getUserAlbums(userId: string, limit: number = 20, offset: number = 0): Promise<Album[]> {
+	return apiRequest('GET', `/users/${userId}/albums?limit=${limit}&offset=${offset}`);
+}
+
+export async function updateAlbum(albumId: string, data: UpdateAlbumRequest): Promise<Album> {
+	return apiRequest('PUT', `/albums/${albumId}`, data);
+}
+
+export async function addMediaToAlbum(albumId: string, media: { url: string; type: string }[]): Promise<SuccessResponse> {
+	return apiRequest('POST', `/albums/${albumId}/media`, { media });
+}
+
+export async function getAlbumMedia(albumId: string, limit: number = 20, page: number = 1, type?: string): Promise<{ media: any[]; total: number; page: number; limit: number }> {
+	const params = new URLSearchParams({ limit: String(limit), page: String(page) });
+	if (type) params.append('type', type);
+	return apiRequest('GET', `/albums/${albumId}/media?${params.toString()}`);
 }

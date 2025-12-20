@@ -58,6 +58,7 @@
 	let createAlbumDialogOpen = $state(false);
 	let newAlbumName = $state('');
 	let newAlbumDesc = $state('');
+	let newAlbumPrivacy = $state<'PUBLIC' | 'FRIENDS' | 'ONLY_ME'>('PUBLIC');
 
 	// Videos
 	let userVideos = $state<any[]>([]);
@@ -335,12 +336,13 @@
 			const newAlbum = await apiRequest('POST', '/albums', {
 				name: newAlbumName,
 				description: newAlbumDesc,
-				privacy: 'public'
+				privacy: newAlbumPrivacy
 			});
 			albums = [newAlbum, ...albums];
 			createAlbumDialogOpen = false;
 			newAlbumName = '';
 			newAlbumDesc = '';
+			newAlbumPrivacy = 'PUBLIC';
 		} catch (err) {
 			console.error('Failed to create album', err);
 		}
@@ -455,6 +457,17 @@
 				<div class="space-y-2">
 					<Label>Description</Label>
 					<Input bind:value={newAlbumDesc} placeholder="Description (optional)" />
+				</div>
+				<div class="space-y-2">
+					<Label>Privacy</Label>
+					<select
+						bind:value={newAlbumPrivacy}
+						class="border-input bg-background ring-offset-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2"
+					>
+						<option value="PUBLIC">🌍 Public - Anyone can see</option>
+						<option value="FRIENDS">👥 Friends - Only friends can see</option>
+						<option value="ONLY_ME">🔒 Only Me - Private</option>
+					</select>
 				</div>
 			</div>
 			<Dialog.Footer>
