@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import {
@@ -13,15 +14,27 @@
 		User
 	} from '@lucide/svelte';
 	import { page } from '$app/stores';
+	import { getEventInvitations } from '$lib/api';
 
 	let activePath = $derived($page.url.pathname);
+	let invitationCount = $state(0);
+
+	// Fetch pending invitations count
+	onMount(async () => {
+		try {
+			const res = await getEventInvitations(1, 1); // Just get count
+			invitationCount = res.total || 0;
+		} catch (err) {
+			console.error('Failed to load invitation count:', err);
+		}
+	});
 
 	const links = [
 		{ label: 'Home', icon: Compass, href: '/events' },
 		{ label: 'Your Events', icon: User, href: '/events/your-events' },
 		{ label: 'Local', icon: MapPin, href: '/events/local' },
 		{ label: 'Birthdays', icon: Gift, href: '/events/birthdays' },
-		{ label: 'Notifications', icon: Bell, href: '/events/notifications' }
+		{ label: 'Notifications', icon: Bell, href: '/events/notifications', showBadge: true }
 	];
 
 	const categories = ['Music', 'Nightlife', 'Arts', 'Food', 'Technology', 'Sports', 'Wellness'];
@@ -51,6 +64,13 @@
 				>
 					<link.icon size={20} />
 					{link.label}
+					{#if link.showBadge && invitationCount > 0}
+						<span
+							class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white"
+						>
+							{invitationCount > 99 ? '99+' : invitationCount}
+						</span>
+					{/if}
 				</Button>
 			</a>
 		{/each}

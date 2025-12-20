@@ -681,6 +681,7 @@ export async function updatePostStatus(postId: string, status: 'active' | 'pendi
 
 export type EventPrivacy = 'public' | 'private' | 'friends';
 export type RSVPStatus = 'going' | 'interested' | 'invited' | 'not_going';
+export type EventInvitationStatus = 'pending' | 'accepted' | 'declined';
 
 export interface EventStats {
 	going_count: number;
@@ -704,6 +705,7 @@ export interface Event {
 	stats: EventStats;
 	my_status?: RSVPStatus;
 	is_host: boolean;
+	friends_going?: UserShortResponse[]; // Friends who are going to this event
 	created_at: string;
 }
 
@@ -731,42 +733,201 @@ export interface UpdateEventRequest {
 	cover_image?: string;
 }
 
-// APIs
-
-export async function createEvent(data: CreateEventRequest): Promise<Event> {
-	return apiRequest<Event>('/events', {
-		method: 'POST',
-		body: JSON.stringify(data)
-	});
+// Event Invitation Types
+export interface EventShort {
+	id: string;
+	title: string;
+	cover_image: string;
+	start_date: string;
+	location: string;
 }
 
-export async function getEvents(page = 1, limit = 10): Promise<{ events: Event[]; total: number }> {
-	return apiRequest<{ events: Event[]; total: number }>('GET', `/events?page=${page}&limit=${limit}`);
+export interface EventInvitation {
+	id: string;
+	event: EventShort;
+	inviter: UserShortResponse;
+	status: EventInvitationStatus;
+	message?: string;
+	created_at: string;
+}
+
+// Event Discussion/Post Types
+export interface EventPostReaction {
+	user: UserShortResponse;
+	emoji: string;
+	timestamp: string;
+}
+
+export interface EventPost {
+	id: string;
+	author: UserShortResponse;
+	content: string;
+	media_urls?: string[];
+	reactions: EventPostReaction[];
+	created_at: string;
+}
+
+// Event Attendee Types
+export interface EventAttendee {
+	user: UserShortResponse;
+	status: RSVPStatus;
+	timestamp: string;
+	is_host: boolean;
+	is_co_host: boolean;
+}
+
+export interface AttendeesListResponse {
+	attendees: EventAttendee[];
+	total: number;
+	page: number;
+	limit: number;
+}
+
+// Event Category Types
+export interface EventCategory {
+	name: string;
+	icon?: string;
+	count: number;
+}
+
+// Birthday Types
+export interface BirthdayUser {
+	id: string;
+	username: string;
+	full_name: string;
+	avatar: string;
+	age: number;
+	date: string;
+}
+
+export interface BirthdayResponse {
+	today: BirthdayUser[];
+	upcoming: BirthdayUser[];
+}
+
+// Search Types
+export interface SearchEventsParams {
+	q?: string;
+	category?: string;
+	period?: 'today' | 'tomorrow' | 'this_week' | 'this_weekend';
+	start_date?: string;
+	end_date?: string;
+	online?: boolean;
+	page?: number;
+	limit?: number;
+}
+
+// ============ Event APIs ============
+
+export async function createEvent(data: CreateEventRequest): Promise<Event> {
+	return apiRequest('POST', '/events', data);
+}
+
+export async function getEvents(page = 1, limit = 10, params?: { category?: string; period?: string; q?: string }): Promise<{ events: Event[]; total: number }> {
+	const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+	if (params?.category) query.set('category', params.category);
+	if (params?.period) query.set('period', params.period);
+	if (params?.q) query.set('q', params.q);
+	return apiRequest('GET', `/events?${query.toString()}`);
 }
 
 export async function getMyEvents(page = 1, limit = 10): Promise<Event[]> {
-	return apiRequest<Event[]>('GET', `/events/my-events?page=${page}&limit=${limit}`);
+	return apiRequest('GET', `/events/my-events?page=${page}&limit=${limit}`);
 }
 
 export async function getBirthdays(): Promise<BirthdayResponse> {
-	return apiRequest<BirthdayResponse>('GET', '/events/birthdays');
+	return apiRequest('GET', '/events/birthdays');
 }
 
 export async function getEvent(id: string): Promise<Event> {
-	return apiRequest<Event>('GET', `/events/${id}`);
+	return apiRequest('GET', `/events/${id}`);
 }
 
 export async function updateEvent(id: string, data: UpdateEventRequest): Promise<Event> {
-	return apiRequest<Event>('PUT', `/events/${id}`, data);
+	return apiRequest('PUT', `/events/${id}`, data);
 }
 
 export async function deleteEvent(id: string): Promise<void> {
-	return apiRequest<void>('DELETE', `/events/${id}`);
+	return apiRequest('DELETE', `/events/${id}`);
 }
 
 export async function rsvpEvent(id: string, status: RSVPStatus): Promise<void> {
-	return apiRequest<void>('POST', `/events/${id}/rsvp`, { status });
+	return apiRequest('POST', `/events/${id}/rsvp`, { status });
 }
+
+// Search & Discovery
+export async function searchEvents(params: SearchEventsParams): Promise<{ events: Event[]; total: number; page: number; limit: number }> {
+	const query = new URLSearchParams();
+	if (params.q) query.set('q', params.q);
+	if (params.category) query.set('category', params.category);
+	if (params.period) query.set('period', params.period);
+	if (params.start_date) query.set('start_date', params.start_date);
+	if (params.end_date) query.set('end_date', params.end_date);
+	if (params.online !== undefined) query.set('online', String(params.online));
+	query.set('page', String(params.page || 1));
+	query.set('limit', String(params.limit || 20));
+	return apiRequest('GET', `/events/search?${query.toString()}`);
+}
+
+export async function getNearbyEvents(lat: number, lng: number, radius = 50, page = 1, limit = 20): Promise<{ events: Event[]; total: number }> {
+	return apiRequest('GET', `/events/nearby?lat=${lat}&lng=${lng}&radius=${radius}&page=${page}&limit=${limit}`);
+}
+
+export async function getEventCategories(): Promise<{ categories: EventCategory[] }> {
+	return apiRequest('GET', '/events/categories');
+}
+
+// Invitations
+export async function inviteFriendsToEvent(eventId: string, friendIds: string[], message?: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/invite`, { friend_ids: friendIds, message });
+}
+
+export async function getEventInvitations(page = 1, limit = 10): Promise<{ invitations: EventInvitation[]; total: number }> {
+	return apiRequest('GET', `/events/invitations?page=${page}&limit=${limit}`);
+}
+
+export async function respondToEventInvitation(invitationId: string, accept: boolean): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/invitations/${invitationId}/respond`, { accept });
+}
+
+// Attendees
+export async function getEventAttendees(eventId: string, status?: RSVPStatus, page = 1, limit = 20): Promise<AttendeesListResponse> {
+	const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+	if (status) query.set('status', status);
+	return apiRequest('GET', `/events/${eventId}/attendees?${query.toString()}`);
+}
+
+// Discussion Posts
+export async function createEventPost(eventId: string, content: string, mediaUrls?: string[]): Promise<EventPost> {
+	return apiRequest('POST', `/events/${eventId}/posts`, { content, media_urls: mediaUrls });
+}
+
+export async function getEventPosts(eventId: string, page = 1, limit = 20): Promise<{ posts: EventPost[]; total: number }> {
+	return apiRequest('GET', `/events/${eventId}/posts?page=${page}&limit=${limit}`);
+}
+
+export async function deleteEventPost(eventId: string, postId: string): Promise<void> {
+	return apiRequest('DELETE', `/events/${eventId}/posts/${postId}`);
+}
+
+export async function reactToEventPost(eventId: string, postId: string, emoji: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/posts/${postId}/react`, { emoji });
+}
+
+// Co-hosts
+export async function addEventCoHost(eventId: string, userId: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/co-hosts`, { user_id: userId });
+}
+
+export async function removeEventCoHost(eventId: string, userId: string): Promise<void> {
+	return apiRequest('DELETE', `/events/${eventId}/co-hosts/${userId}`);
+}
+
+// Sharing
+export async function shareEvent(eventId: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/share`);
+}
+
 
 // --- Album API Functions ---
 
