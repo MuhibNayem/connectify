@@ -33,44 +33,44 @@ It orchestrates the display of messages and the message input field.
 	import { voiceCallService } from '$lib/stores/voice-call.svelte';
 	import { Phone, Video } from '@lucide/svelte';
 
-let showGroupInfo = $state(false);
+	let showGroupInfo = $state(false);
 
 	import { getProduct } from '$lib/api/marketplace'; // Import getProduct if needed or assume passed product object
 
-let {
-	conversationId,
-	initialProduct = null,
-	initialMessage = '',
-	isMarketplace = false,
+	let {
+		conversationId,
+		initialProduct = null,
+		initialMessage = '',
+		isMarketplace = false,
 		onProductClick = undefined,
-	onMessageSent = undefined
-} = $props<{
-	conversationId: string;
+		onMessageSent = undefined
+	} = $props<{
+		conversationId: string;
 		initialProduct?: any; // Product object
 		initialMessage?: string;
 		isMarketplace?: boolean; // If true, only fetch marketplace messages
 		onProductClick?: (productId: string) => void; // Callback when product is clicked in chat
 		onMessageSent?: () => void; // Callback when a message is sent
-}>();
+	}>();
 
-let conversationType = $derived(conversationId.split('-')[0]);
-let currentChatId = $derived(conversationId.split('-')[1]);
-function deriveConversationKey() {
-	if (!conversationId) return '';
-	if (conversationId.startsWith('dm_') || conversationId.startsWith('group_')) {
-		return conversationId;
+	let conversationType = $derived(conversationId.split('-')[0]);
+	let currentChatId = $derived(conversationId.split('-')[1]);
+	function deriveConversationKey() {
+		if (!conversationId) return '';
+		if (conversationId.startsWith('dm_') || conversationId.startsWith('group_')) {
+			return conversationId;
+		}
+		const [type, id] = conversationId.split('-');
+		if (type === 'group' && id) {
+			return `group_${id}`;
+		}
+		if (type === 'user' && id && auth.state.user?.id) {
+			const myId = auth.state.user.id;
+			return myId < id ? `dm_${myId}_${id}` : `dm_${id}_${myId}`;
+		}
+		return '';
 	}
-	const [type, id] = conversationId.split('-');
-	if (type === 'group' && id) {
-		return `group_${id}`;
-	}
-	if (type === 'user' && id && auth.state.user?.id) {
-		const myId = auth.state.user.id;
-		return myId < id ? `dm_${myId}_${id}` : `dm_${id}_${myId}`;
-	}
-	return '';
-}
-let conversationKey = $derived(deriveConversationKey());
+	let conversationKey = $derived(deriveConversationKey());
 
 	let messages = $state<any[]>([]);
 	let isLoading = $state(true);
@@ -543,21 +543,21 @@ let conversationKey = $derived(deriveConversationKey());
 	function handleMessageRendered(event: CustomEvent<{ messageId: string }>) {
 		const messageId = event.detail.messageId;
 		// Only mark as delivered if the current user is the receiver and not the sender
-	const message = messages.find((m) => m.id === messageId);
-	if (message && message.sender_id !== auth.state.user?.id) {
-		if (!conversationKey) {
-			return;
-		}
-		const transportId = getTransportMessageId(message);
-		if (!transportId) {
-			return;
-		}
-		deliveredQueue.add(transportId);
-		clearTimeout(deliveredDebounceTimer);
-		deliveredDebounceTimer = setTimeout(async () => {
-			if (deliveredQueue.size > 0) {
-				try {
-					await markMessagesAsDelivered(conversationKey, Array.from(deliveredQueue));
+		const message = messages.find((m) => m.id === messageId);
+		if (message && message.sender_id !== auth.state.user?.id) {
+			if (!conversationKey) {
+				return;
+			}
+			const transportId = getTransportMessageId(message);
+			if (!transportId) {
+				return;
+			}
+			deliveredQueue.add(transportId);
+			clearTimeout(deliveredDebounceTimer);
+			deliveredDebounceTimer = setTimeout(async () => {
+				if (deliveredQueue.size > 0) {
+					try {
+						await markMessagesAsDelivered(conversationKey, Array.from(deliveredQueue));
 						console.log(
 							'markMessagesAsDelivered API call successful for IDs:',
 							Array.from(deliveredQueue)
@@ -588,8 +588,8 @@ let conversationKey = $derived(deriveConversationKey());
 		try {
 			const summaries = await getConversationSummaries();
 			const [type, id] = conversationId.split('-');
-			// Match by ID and type (user=DM, group=group)
-			const partner = summaries.find((s) => s.id === id && s.is_group === (type === 'group'));
+			// Match by full conversation ID format (summaries have 'group-{id}' or 'user-{id}' format)
+			const partner = summaries.find((s) => s.id === conversationId || s.id === id);
 			if (partner) {
 				conversationPartner = partner;
 			} else if (type === 'user' && id) {
@@ -606,6 +606,23 @@ let conversationKey = $derived(deriveConversationKey());
 						is_group: false,
 						unread_count: 0
 					};
+				}
+			} else if (type === 'group' && id) {
+				// Group not found in summaries, fetch group info directly
+				const { apiRequest } = await import('$lib/api');
+				try {
+					const group = await apiRequest('GET', `/groups/${id}`);
+					if (group) {
+						conversationPartner = {
+							id: id,
+							name: group.name || 'Group',
+							avatar: group.avatar,
+							is_group: true,
+							unread_count: 0
+						};
+					}
+				} catch (e) {
+					console.error('Failed to fetch group info:', e);
 				}
 			}
 
@@ -1237,8 +1254,8 @@ let conversationKey = $derived(deriveConversationKey());
 
 	function handleMessageVisible(message: any) {
 		// Only mark messages as seen if they are NOT from the current user
-	if (message.sender_id === auth.state.user?.id) return;
-	if (!conversationKey) return;
+		if (message.sender_id === auth.state.user?.id) return;
+		if (!conversationKey) return;
 
 		const messageIdentifier = getTransportMessageId(message);
 		if (!messageIdentifier) return;
@@ -1265,7 +1282,12 @@ let conversationKey = $derived(deriveConversationKey());
 
 			// 2. Mark conversation as seen (to reset unread count)
 			// We can do this less frequently or just once per batch.
-			markConversationAsSeen(conversationId, new Date().toISOString(), type === 'group', conversationKey);
+			markConversationAsSeen(
+				conversationId,
+				new Date().toISOString(),
+				type === 'group',
+				conversationKey
+			);
 		}, 1000); // 1s debounce
 	}
 
@@ -1459,7 +1481,41 @@ let conversationKey = $derived(deriveConversationKey());
 			</div>
 		{/if}
 		{#if isLoading}
-			<p>Loading messages...</p>
+			<!-- Skeleton Loader for Messages -->
+			<div class="animate-pulse space-y-4">
+				<!-- Left-aligned skeleton (received message) -->
+				<div class="flex items-start gap-2.5">
+					<div class="h-8 w-8 rounded-full bg-gray-200"></div>
+					<div class="flex w-full max-w-[280px] flex-col gap-1">
+						<div class="h-3 w-20 rounded bg-gray-200"></div>
+						<div class="h-16 rounded-lg bg-gray-200"></div>
+					</div>
+				</div>
+				<!-- Right-aligned skeleton (sent message) -->
+				<div class="flex flex-row-reverse items-start gap-2.5">
+					<div class="h-8 w-8 rounded-full bg-gray-200"></div>
+					<div class="flex w-full max-w-[280px] flex-col items-end gap-1">
+						<div class="h-3 w-20 rounded bg-gray-200"></div>
+						<div class="h-12 w-48 rounded-lg bg-blue-100"></div>
+					</div>
+				</div>
+				<!-- Another left-aligned skeleton -->
+				<div class="flex items-start gap-2.5">
+					<div class="h-8 w-8 rounded-full bg-gray-200"></div>
+					<div class="flex w-full max-w-[280px] flex-col gap-1">
+						<div class="h-3 w-16 rounded bg-gray-200"></div>
+						<div class="h-20 w-64 rounded-lg bg-gray-200"></div>
+					</div>
+				</div>
+				<!-- Another right-aligned skeleton -->
+				<div class="flex flex-row-reverse items-start gap-2.5">
+					<div class="h-8 w-8 rounded-full bg-gray-200"></div>
+					<div class="flex w-full max-w-[280px] flex-col items-end gap-1">
+						<div class="h-3 w-24 rounded bg-gray-200"></div>
+						<div class="h-10 w-40 rounded-lg bg-blue-100"></div>
+					</div>
+				</div>
+			</div>
 		{:else if error}
 			<p class="text-red-500">{error}</p>
 		{:else}
@@ -1470,7 +1526,7 @@ let conversationKey = $derived(deriveConversationKey());
 						on:rendered={handleMessageRendered}
 						on:deleted={handleMessageDeleted}
 						{conversationId}
-						conversationKey={conversationKey}
+						{conversationKey}
 						{onProductClick}
 					/>
 					<!-- We can pass conversationId or callbacks to Message if needed for specific actions -->
