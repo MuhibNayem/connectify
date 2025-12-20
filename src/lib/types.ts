@@ -7,6 +7,7 @@ export interface Reaction {
 export interface Message {
 	id: string;
 	string_id?: string; // Mapped from Cassandra UUID
+	_legacy_id?: string; // Original Mongo ObjectID for legacy WS events
 	sender_id: string;
 	sender_name?: string;
 	receiver_id?: string;

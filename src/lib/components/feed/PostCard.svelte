@@ -51,11 +51,30 @@
 	// Reactive user ID from the new auth store
 	$: currentUserId = auth.state.user?.id;
 
-	// Defensive defaults
+	// Local state copy to avoid mutating props directly (Svelte 5 ownership rules)
+	let localReactions = 0;
+	let localComments = 0;
+	let localContent = '';
+	let localUpdatedAt = '';
+	let localSpecificReactions: { [key: string]: number } = {};
+
+	// Sync local state with prop on changes
+	$: {
+		localReactions = post?.total_reactions || 0;
+		localComments = post?.total_comments || 0;
+		localContent = post?.content || '';
+		localUpdatedAt = post?.updated_at || '';
+		localSpecificReactions = post?.specific_reaction_counts || {};
+	}
+
+	// Defensive defaults using local state
 	$: safePost = {
 		...post,
-		total_reactions: post?.total_reactions || 0,
-		total_comments: post?.total_comments || 0,
+		total_reactions: localReactions,
+		total_comments: localComments,
+		content: localContent,
+		updated_at: localUpdatedAt,
+		specific_reaction_counts: localSpecificReactions,
 		media: post?.media || [],
 		mentioned_users: post?.mentioned_users || []
 	};
@@ -95,7 +114,7 @@
 
 			// Handle ReactionCreated
 			if (event.type === 'ReactionCreated' && event.data.target_id === safePost.id) {
-				if (event.data.user_id != currentUserId) post.total_reactions += 1; // Mutate prop directly for reactivity
+				if (event.data.user_id != currentUserId) localReactions += 1;
 
 				if (event.data.user_id === currentUserId && event.data.type === 'LIKE') {
 					userReactionId = event.data.id;
@@ -104,8 +123,7 @@
 
 			// Handle ReactionDeleted
 			if (event.type === 'ReactionDeleted' && event.data.target_id === safePost.id) {
-				if (event.data.user_id != currentUserId)
-					post.total_reactions = Math.max(0, post.total_reactions - 1);
+				if (event.data.user_id != currentUserId) localReactions = Math.max(0, localReactions - 1);
 
 				if (event.data.user_id === currentUserId && event.data.type === 'LIKE') {
 					userReactionId = null;
@@ -114,12 +132,12 @@
 
 			// Handle CommentCreated
 			if (event.type === 'CommentCreated' && event.data.post_id === safePost.id) {
-				post.total_comments += 1;
+				localComments += 1;
 			}
 
 			// Handle CommentDeleted
 			if (event.type === 'CommentDeleted' && event.data.post_id === safePost.id) {
-				post.total_comments = Math.max(0, post.total_comments - 1);
+				localComments = Math.max(0, localComments - 1);
 			}
 		});
 
@@ -143,9 +161,9 @@
 					`/reactions/${userReactionId}?targetId=${safePost.id}&targetType=post`
 				);
 				userReactionId = null;
-				post.total_reactions--;
-				if (post.specific_reaction_counts && post.specific_reaction_counts[userReactionType]) {
-					post.specific_reaction_counts[userReactionType]--;
+				localReactions--;
+				if (localSpecificReactions && localSpecificReactions[userReactionType!]) {
+					localSpecificReactions[userReactionType!]--;
 				}
 				userReactionType = null;
 			} else {
@@ -156,10 +174,10 @@
 					type: type
 				});
 				userReactionId = newReaction.id;
-				post.total_reactions += 1;
+				localReactions += 1;
 				userReactionType = type;
-				if (post.specific_reaction_counts) {
-					post.specific_reaction_counts[type] = (post.specific_reaction_counts[type] || 0) + 1;
+				if (localSpecificReactions) {
+					localSpecificReactions[type] = (localSpecificReactions[type] || 0) + 1;
 				}
 			}
 		} catch (e: any) {
@@ -200,8 +218,8 @@
 		isSaving = true;
 		try {
 			const updated = await updatePost(safePost.id, { content: editedContent });
-			post.content = updated.content;
-			post.updated_at = updated.updated_at;
+			localContent = updated.content;
+			localUpdatedAt = updated.updated_at;
 			isEditing = false;
 		} catch (err) {
 			console.error('Failed to update post:', err);

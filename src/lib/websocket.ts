@@ -4,7 +4,10 @@ import { addNotification } from './stores/notifications';
 import type { Notification } from './api';
 import { updateUserStatus } from './stores/presence';
 import { voiceCallService } from './stores/voice-call.svelte';
+import { auth } from '$lib/stores/auth.svelte';
+import type { ReactionEvent, ReadReceiptEvent, MessageEditedEvent, MessageCreatedEvent } from '$lib/types';
 
+const WS_AUTH_PROTOCOL = 'connectify.auth';
 
 export interface WebSocketEvent {
 	type: string;
@@ -24,15 +27,16 @@ export function connectWebSocket() {
 		return;
 	}
 
-	const token = localStorage.getItem('accessToken');
+	const token = getActiveAccessToken();
 	if (!token) {
 		console.log('No access token found, WebSocket not connecting.');
 		return;
 	}
 
 	console.log('Attempting to connect WebSocket...');
-	const url = `${WS_URL}?token=${token}`;
-	ws = new WebSocket(url);
+	const url = WS_URL;
+	const protocols = [WS_AUTH_PROTOCOL, token];
+	ws = new WebSocket(url, protocols);
 
 	ws.onopen = () => {
 		console.log('WebSocket connected.');
@@ -129,4 +133,18 @@ export function sendWebSocketMessage(type: string, payload: any) {
 	} else {
 		console.warn('WebSocket not open. Message not sent:', type, payload);
 	}
+}
+
+function getActiveAccessToken(): string | null {
+	if (auth.state.accessToken) {
+		return auth.state.accessToken;
+	}
+	if (browser) {
+		try {
+			return sessionStorage.getItem('accessToken');
+		} catch (error) {
+			console.error('Failed to read session storage token:', error);
+		}
+	}
+	return null;
 }

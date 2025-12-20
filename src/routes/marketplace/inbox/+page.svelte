@@ -47,6 +47,12 @@
 	onMount(async () => {
 		await loadConversations();
 
+		// Restore conversation from URL query param (if present)
+		const chatParam = $page.url.searchParams.get('chat');
+		if (chatParam) {
+			selectedConversationId = chatParam;
+		}
+
 		// Subscribe to Presence Store (same as ConversationList)
 		unsubscribePresence = presenceStore.subscribe((value) => {
 			presenceState = value;
@@ -105,6 +111,24 @@
 							return timeB - timeA;
 						});
 					}
+					break;
+				}
+				case 'CONVERSATION_SEEN_UPDATE': {
+					const { conversation_id, conversation_ui_id, user_id, is_group } = event.data;
+					if (user_id !== auth.state.user?.id || is_group) {
+						break;
+					}
+					const normalizedId =
+						conversation_ui_id ||
+						(conversation_id?.startsWith('user-') ? conversation_id : `user-${conversation_id}`);
+					if (!normalizedId) break;
+					conversations = conversations.map((conv) => {
+						const convId = conv.id.startsWith('user-') ? conv.id : `user-${conv.id}`;
+						if (convId === normalizedId) {
+							return { ...conv, unread_count: 0 };
+						}
+						return conv;
+					});
 					break;
 				}
 			}
@@ -193,6 +217,15 @@
 	function handleMessageSent() {
 		loadConversations();
 	}
+
+	// Handle conversation selection with URL update
+	function selectConversation(convId: string) {
+		selectedConversationId = convId;
+		// Update URL with query parameter (avoids 404 on refresh)
+		const url = new URL($page.url);
+		url.searchParams.set('chat', convId);
+		replaceState(url, {});
+	}
 </script>
 
 <div class="flex h-screen overflow-hidden bg-[#f0f2f5]">
@@ -265,12 +298,14 @@
 				<ul class="divide-y divide-gray-100">
 					{#each conversations as conv}
 						{@const convId = conv.id.startsWith('user-') ? conv.id : `user-${conv.id}`}
+						{@const userId = conv.id.includes('-') ? conv.id.split('-')[1] : conv.id}
+						{@const isOnline = presenceState[userId]?.status === 'online'}
 						<button
 							class="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-gray-50 {selectedConversationId ===
 							convId
 								? 'bg-blue-50'
 								: ''}"
-							onclick={() => (selectedConversationId = convId)}
+							onclick={() => selectConversation(convId)}
 						>
 							<div class="relative">
 								<img
@@ -279,7 +314,7 @@
 									class="h-12 w-12 rounded-full bg-gray-200 object-cover"
 								/>
 								<!-- Online status indicator (using presenceStore) -->
-								{#if presenceState[conv.id]?.status === 'online'}
+								{#if isOnline}
 									<span
 										class="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500"
 									></span>

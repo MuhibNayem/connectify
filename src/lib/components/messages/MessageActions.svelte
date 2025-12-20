@@ -5,23 +5,25 @@
 	import { auth } from '$lib/stores/auth.svelte';
 	import ReactionPicker from './ReactionPicker.svelte';
 
-	let {
-		messageId,
-		messageContent,
-		messageSenderId,
-		messageCreatedAt,
-		conversationId,
-		onEdited,
-		onDeleted
-	} = $props<{
-		messageId: string;
-		messageContent: string;
-		messageSenderId: string;
-		messageCreatedAt: string;
-		conversationId: string;
-		onEdited?: (newContent: string) => void;
-		onDeleted?: () => void;
-	}>();
+let {
+	messageId,
+	messageContent,
+	messageSenderId,
+	messageCreatedAt,
+	conversationId,
+	conversationKey = '',
+	onEdited,
+	onDeleted
+} = $props<{
+	messageId: string;
+	messageContent: string;
+	messageSenderId: string;
+	messageCreatedAt: string;
+	conversationId: string;
+	conversationKey?: string;
+	onEdited?: (newContent: string) => void;
+	onDeleted?: () => void;
+}>();
 
 	const dispatch = createEventDispatcher();
 
@@ -72,7 +74,8 @@
 		}
 
 		try {
-			await editMessage(messageId, editContent, conversationId);
+			const targetConversation = conversationKey || conversationId;
+			await editMessage(messageId, editContent, targetConversation);
 			if (onEdited) {
 				onEdited(editContent);
 			}
@@ -94,7 +97,8 @@
 
 		isDeleting = true;
 		try {
-			await deleteMessage(messageId, conversationId);
+			const targetConversation = conversationKey || conversationId;
+			await deleteMessage(messageId, targetConversation);
 			if (onDeleted) {
 				onDeleted();
 			}

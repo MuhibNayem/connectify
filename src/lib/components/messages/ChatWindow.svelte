@@ -33,28 +33,44 @@ It orchestrates the display of messages and the message input field.
 	import { voiceCallService } from '$lib/stores/voice-call.svelte';
 	import { Phone, Video } from '@lucide/svelte';
 
-	let showGroupInfo = $state(false);
+let showGroupInfo = $state(false);
 
 	import { getProduct } from '$lib/api/marketplace'; // Import getProduct if needed or assume passed product object
 
-	let {
-		conversationId,
-		initialProduct = null,
-		initialMessage = '',
-		isMarketplace = false,
+let {
+	conversationId,
+	initialProduct = null,
+	initialMessage = '',
+	isMarketplace = false,
 		onProductClick = undefined,
-		onMessageSent = undefined
-	} = $props<{
-		conversationId: string;
+	onMessageSent = undefined
+} = $props<{
+	conversationId: string;
 		initialProduct?: any; // Product object
 		initialMessage?: string;
 		isMarketplace?: boolean; // If true, only fetch marketplace messages
 		onProductClick?: (productId: string) => void; // Callback when product is clicked in chat
 		onMessageSent?: () => void; // Callback when a message is sent
-	}>();
+}>();
 
-	let conversationType = $derived(conversationId.split('-')[0]);
-	let currentChatId = $derived(conversationId.split('-')[1]);
+let conversationType = $derived(conversationId.split('-')[0]);
+let currentChatId = $derived(conversationId.split('-')[1]);
+function deriveConversationKey() {
+	if (!conversationId) return '';
+	if (conversationId.startsWith('dm_') || conversationId.startsWith('group_')) {
+		return conversationId;
+	}
+	const [type, id] = conversationId.split('-');
+	if (type === 'group' && id) {
+		return `group_${id}`;
+	}
+	if (type === 'user' && id && auth.state.user?.id) {
+		const myId = auth.state.user.id;
+		return myId < id ? `dm_${myId}_${id}` : `dm_${id}_${myId}`;
+	}
+	return '';
+}
+let conversationKey = $derived(deriveConversationKey());
 
 	let messages = $state<any[]>([]);
 	let isLoading = $state(true);
@@ -116,6 +132,38 @@ It orchestrates the display of messages and the message input field.
 
 	// Queue for messages that have been rendered but not yet marked as delivered
 	let deliveredQueue = new Set<string>();
+
+	function getTransportMessageId(message: MessageModel): string | undefined {
+		return message?.string_id || message?.id || message?._legacy_id;
+	}
+
+	function normalizeIncomingMessage(raw: any): MessageModel {
+		if (!raw) return raw;
+		const legacyId = raw.id;
+		return {
+			...raw,
+			id: raw.string_id || legacyId,
+			_legacy_id: legacyId,
+			seen_by: raw.seen_by || [],
+			delivered_to: raw.delivered_to || []
+		};
+	}
+
+	function candidateMessageIds(message: MessageModel): string[] {
+		const ids = [message.id, message.string_id, message._legacy_id].filter(Boolean) as string[];
+		return Array.from(new Set(ids));
+	}
+
+	function messageMatchesIdentifier(message: MessageModel, identifier?: string): boolean {
+		if (!identifier) return false;
+		return candidateMessageIds(message).includes(identifier);
+	}
+
+	function eventMatchesMessage(message: MessageModel, ids?: string[]): boolean {
+		if (!ids || ids.length === 0) return false;
+		const candidates = candidateMessageIds(message);
+		return ids.some((id) => candidates.includes(id));
+	}
 
 	// Restore Keys Logic
 
@@ -495,14 +543,21 @@ It orchestrates the display of messages and the message input field.
 	function handleMessageRendered(event: CustomEvent<{ messageId: string }>) {
 		const messageId = event.detail.messageId;
 		// Only mark as delivered if the current user is the receiver and not the sender
-		const message = messages.find((m) => m.id === messageId);
-		if (message && message.sender_id !== auth.state.user?.id) {
-			deliveredQueue.add(messageId);
-			clearTimeout(deliveredDebounceTimer);
-			deliveredDebounceTimer = setTimeout(async () => {
-				if (deliveredQueue.size > 0) {
-					try {
-						await markMessagesAsDelivered(conversationId, Array.from(deliveredQueue));
+	const message = messages.find((m) => m.id === messageId);
+	if (message && message.sender_id !== auth.state.user?.id) {
+		if (!conversationKey) {
+			return;
+		}
+		const transportId = getTransportMessageId(message);
+		if (!transportId) {
+			return;
+		}
+		deliveredQueue.add(transportId);
+		clearTimeout(deliveredDebounceTimer);
+		deliveredDebounceTimer = setTimeout(async () => {
+			if (deliveredQueue.size > 0) {
+				try {
+					await markMessagesAsDelivered(conversationKey, Array.from(deliveredQueue));
 						console.log(
 							'markMessagesAsDelivered API call successful for IDs:',
 							Array.from(deliveredQueue)
@@ -533,7 +588,8 @@ It orchestrates the display of messages and the message input field.
 		try {
 			const summaries = await getConversationSummaries();
 			const [type, id] = conversationId.split('-');
-			const partner = summaries.find((s) => s.id === conversationId);
+			// Match by ID and type (user=DM, group=group)
+			const partner = summaries.find((s) => s.id === id && s.is_group === (type === 'group'));
 			if (partner) {
 				conversationPartner = partner;
 			} else if (type === 'user' && id) {
@@ -1181,10 +1237,14 @@ It orchestrates the display of messages and the message input field.
 
 	function handleMessageVisible(message: any) {
 		// Only mark messages as seen if they are NOT from the current user
-		if (message.sender_id === auth.state.user?.id) return;
+	if (message.sender_id === auth.state.user?.id) return;
+	if (!conversationKey) return;
+
+		const messageIdentifier = getTransportMessageId(message);
+		if (!messageIdentifier) return;
 
 		// Add to queue
-		seenQueue.add(message.id);
+		seenQueue.add(messageIdentifier);
 
 		clearTimeout(seenDebounceTimer);
 		seenDebounceTimer = setTimeout(async () => {
@@ -1194,7 +1254,7 @@ It orchestrates the display of messages and the message input field.
 			if (seenQueue.size > 0) {
 				const ids = Array.from(seenQueue);
 				try {
-					await markMessagesAsSeen(conversationId, ids);
+					await markMessagesAsSeen(conversationKey, ids);
 					// Locally update message status if needed?
 					// The websocket event will handle it usually, but we could do optimistic update.
 				} catch (e) {
@@ -1205,7 +1265,7 @@ It orchestrates the display of messages and the message input field.
 
 			// 2. Mark conversation as seen (to reset unread count)
 			// We can do this less frequently or just once per batch.
-			markConversationAsSeen(conversationId, new Date().toISOString(), type === 'group');
+			markConversationAsSeen(conversationId, new Date().toISOString(), type === 'group', conversationKey);
 		}, 1000); // 1s debounce
 	}
 
@@ -1410,6 +1470,7 @@ It orchestrates the display of messages and the message input field.
 						on:rendered={handleMessageRendered}
 						on:deleted={handleMessageDeleted}
 						{conversationId}
+						conversationKey={conversationKey}
 						{onProductClick}
 					/>
 					<!-- We can pass conversationId or callbacks to Message if needed for specific actions -->

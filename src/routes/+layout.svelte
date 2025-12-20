@@ -10,9 +10,12 @@
 	import { setUnreadCount } from '$lib/stores/notifications';
 	import { connectWebSocket, disconnectWebSocket } from '$lib/websocket';
 
-	onMount(() => {
-		auth.initialize();
-	});
+onMount(() => {
+	auth.initialize();
+	if (!auth.state.accessToken) {
+		auth.refresh().catch(() => {});
+	}
+});
 
 	// Reactive effect to manage WebSocket and notifications
 	$effect(() => {

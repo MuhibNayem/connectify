@@ -11,7 +11,8 @@
 	import { quintOut } from 'svelte/easing';
 
 	export let message: Message;
-	export let conversationId: string = '';
+export let conversationId: string = '';
+export let conversationKey: string = '';
 	export let onProductClick: ((productId: string) => void) | undefined = undefined;
 
 	const dispatch = createEventDispatcher();
@@ -450,6 +451,7 @@
 				messageSenderId={message.sender_id}
 				messageCreatedAt={message.created_at}
 				{conversationId}
+				{conversationKey}
 				onEdited={(newContent) => (message.content = newContent)}
 				on:deleted={() => dispatch('deleted', { id: message.id })}
 			/>

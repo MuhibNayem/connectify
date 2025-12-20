@@ -377,9 +377,19 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
 	return apiRequest('GET', '/conversations', undefined, true);
 }
 
-export async function markConversationAsSeen(conversationId: string, timestamp: string, isGroup: boolean): Promise<void> {
-	const [type, id] = conversationId.split('-');
-	await apiRequest('POST', `/conversations/${id}/seen`, { timestamp, is_group: isGroup }, true);
+export async function markConversationAsSeen(
+	conversationId: string,
+	timestamp: string,
+	isGroup: boolean,
+	conversationKey?: string
+): Promise<void> {
+	const parts = conversationId.split('-');
+	const id = parts.length > 1 ? parts[1] : parts[0];
+	const payload: Record<string, any> = { timestamp, is_group: isGroup };
+	if (conversationKey) {
+		payload.conversation_key = conversationKey;
+	}
+	await apiRequest('POST', `/conversations/${id}/seen`, payload, true);
 }
 
 export interface GroupResponse {
@@ -699,37 +709,29 @@ export async function createEvent(data: CreateEventRequest): Promise<Event> {
 }
 
 export async function getEvents(page = 1, limit = 10): Promise<{ events: Event[]; total: number }> {
-	return apiRequest<{ events: Event[]; total: number }>(`/events?page=${page}&limit=${limit}`);
+	return apiRequest<{ events: Event[]; total: number }>('GET', `/events?page=${page}&limit=${limit}`);
 }
 
 export async function getMyEvents(page = 1, limit = 10): Promise<Event[]> {
-	return apiRequest<Event[]>(`/events/my-events?page=${page}&limit=${limit}`);
+	return apiRequest<Event[]>('GET', `/events/my-events?page=${page}&limit=${limit}`);
 }
 
 export async function getBirthdays(): Promise<BirthdayResponse> {
-	return apiRequest<BirthdayResponse>('/events/birthdays');
+	return apiRequest<BirthdayResponse>('GET', '/events/birthdays');
 }
 
 export async function getEvent(id: string): Promise<Event> {
-	return apiRequest<Event>(`/events/${id}`);
+	return apiRequest<Event>('GET', `/events/${id}`);
 }
 
 export async function updateEvent(id: string, data: UpdateEventRequest): Promise<Event> {
-	return apiRequest<Event>(`/events/${id}`, {
-		method: 'PUT',
-		body: JSON.stringify(data)
-	});
+	return apiRequest<Event>('PUT', `/events/${id}`, data);
 }
 
 export async function deleteEvent(id: string): Promise<void> {
-	return apiRequest<void>(`/events/${id}`, {
-		method: 'DELETE'
-	});
+	return apiRequest<void>('DELETE', `/events/${id}`);
 }
 
 export async function rsvpEvent(id: string, status: RSVPStatus): Promise<void> {
-	return apiRequest<void>(`/events/${id}/rsvp`, {
-		method: 'POST',
-		body: JSON.stringify({ status })
-	});
+	return apiRequest<void>('POST', `/events/${id}/rsvp`, { status });
 }

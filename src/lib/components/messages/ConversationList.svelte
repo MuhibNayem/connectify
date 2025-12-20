@@ -145,14 +145,20 @@ Fetches friends and groups to populate the list.
 					break;
 				}
 				case 'CONVERSATION_SEEN_UPDATE': {
-					const { conversation_id, user_id } = event.data;
+					const { conversation_id, conversation_ui_id, user_id, is_group } = event.data;
 					if (user_id === auth.state.user?.id) {
-						conversations = conversations.map((conv) => {
-							if (conv.id === conversation_id) {
-								return { ...conv, unread_count: 0 };
-							}
-							return conv;
-						});
+						const normalizedId =
+							conversation_ui_id ||
+							(is_group
+								? `group-${conversation_id}`
+								: conversation_id?.startsWith('user-')
+									? conversation_id
+									: `user-${conversation_id}`);
+						if (normalizedId) {
+							conversations = conversations.map((conv) =>
+								conv.id === normalizedId ? { ...conv, unread_count: 0 } : conv
+							);
+						}
 					}
 					break;
 				}
@@ -407,7 +413,8 @@ Fetches friends and groups to populate the list.
 				{#each conversations as conv (conv.id)}
 					{@const conversationId = $page.params.id}
 					{@const isActive = conversationId === `${conv.is_group ? 'group' : 'user'}-${conv.id}`}
-					{@const isOnline = !conv.is_group && presenceState[conv.id]?.status === 'online'}
+					{@const userId = conv.id.includes('-') ? conv.id.split('-')[1] : conv.id}
+					{@const isOnline = !conv.is_group && presenceState[userId]?.status === 'online'}
 					<li>
 						<a
 							href={getConversationUrl(conv)}
