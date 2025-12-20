@@ -704,14 +704,13 @@ It orchestrates the display of messages and the message input field.
 			const response = await getMessages(params);
 			if (response && Array.isArray(response.messages)) {
 				// Ensure seen_by and delivered_to are always arrays
-				const newMessages = response.messages
-					.map((msg: any) => ({
-						...msg,
-						id: msg.string_id || msg.id, // Use Cassandra UUID if available
-						seen_by: msg.seen_by || [],
-						delivered_to: msg.delivered_to || []
-					}))
-					.reverse(); // API returns newest first (desc), we reverse for chronological display
+				const newMessages = response.messages.map((msg: any) => ({
+					...msg,
+					id: msg.string_id || msg.id, // Use Cassandra UUID if available
+					seen_by: msg.seen_by || [],
+					delivered_to: msg.delivered_to || []
+				}));
+				// .reverse(); // Backend now returns chronological (oldest first)
 
 				if (newMessages.length < limit) {
 					hasMore = false;
@@ -1321,7 +1320,7 @@ It orchestrates the display of messages and the message input field.
 					<AvatarImage src={conversationPartner.avatar} alt={conversationPartner.name} />
 					<AvatarFallback>{conversationPartner.name.charAt(0).toUpperCase()}</AvatarFallback>
 				</Avatar>
-				{#if !conversationPartner.is_group && presenceState[conversationPartner.id]?.status === 'online'}
+				{#if !conversationPartner.is_group && presenceState[conversationPartner.id.replace('user-', '')]?.status === 'online'}
 					<span
 						class="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-green-500"
 					></span>
@@ -1338,11 +1337,13 @@ It orchestrates the display of messages and the message input field.
 					</button>
 				{:else}
 					<p class="text-xs text-zinc-400">
-						{#if presenceState[conversationPartner.id]?.status === 'online'}
+						{#if presenceState[conversationPartner.id.replace('user-', '')]?.status === 'online'}
 							<span class="text-emerald-500">Online</span>
-						{:else if presenceState[conversationPartner.id]?.last_seen}
+						{:else if presenceState[conversationPartner.id.replace('user-', '')]?.last_seen}
 							Last seen {formatDistanceToNow(
-								new Date(presenceState[conversationPartner.id].last_seen * 1000),
+								new Date(
+									presenceState[conversationPartner.id.replace('user-', '')].last_seen * 1000
+								),
 								{
 									addSuffix: true
 								}

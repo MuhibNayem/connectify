@@ -407,16 +407,9 @@
 	}
 	import { goto } from '$app/navigation';
 
-	// Replicate backend logic for deterministic Conversation ID
-	function getConversationId(id1: string, id2: string) {
-		const sorted = [id1, id2].sort();
-		return `dm_${sorted[0]}_${sorted[1]}`;
-	}
-
 	async function handleMessage() {
 		if (!auth.state.user?.id || !user?.id) return;
-		const convId = getConversationId(auth.state.user.id, user.id);
-		await goto(`/messages/${convId}`);
+		await goto(`/messages/user-${user.id}`);
 	}
 </script>
 
