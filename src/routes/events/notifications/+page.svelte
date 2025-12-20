@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import EventsSidebar from '$lib/components/events/EventsSidebar.svelte';
 	import {
@@ -15,13 +15,40 @@
 	import { Button } from '$lib/components/ui/button';
 	import { getEventInvitations, respondToEventInvitation, type EventInvitation } from '$lib/api';
 	import { formatDistanceToNow } from 'date-fns';
+	import { websocketMessages } from '$lib/websocket';
+	import { fade, fly } from 'svelte/transition';
 
 	let invitations: EventInvitation[] = $state([]);
 	let loading = $state(true);
 	let responding = $state<string | null>(null);
+	let removingIds = $state<Set<string>>(new Set());
+
+	// WebSocket subscription for real-time updates
+	let wsUnsubscribe: (() => void) | null = null;
 
 	onMount(async () => {
 		await loadInvitations();
+
+		// Subscribe to WebSocket for real-time invitation updates
+		wsUnsubscribe = websocketMessages.subscribe((event) => {
+			if (!event) return;
+
+			switch (event.type) {
+				case 'EVENT_INVITATION_RESPONDED':
+					// Remove the invitation from list when responded from elsewhere
+					const invitationId = event.data?.invitation_id;
+					if (invitationId) {
+						removeInvitationWithAnimation(invitationId);
+					}
+					break;
+			}
+		});
+	});
+
+	onDestroy(() => {
+		if (wsUnsubscribe) {
+			wsUnsubscribe();
+		}
 	});
 
 	async function loadInvitations() {
@@ -36,17 +63,32 @@
 		}
 	}
 
+	function removeInvitationWithAnimation(invitationId: string) {
+		// Mark for removal animation
+		removingIds = new Set([...removingIds, invitationId]);
+
+		// Remove after animation delay
+		setTimeout(() => {
+			invitations = invitations.filter((i) => i.id !== invitationId);
+			removingIds = new Set([...removingIds].filter((id) => id !== invitationId));
+		}, 300);
+	}
+
 	async function handleRespond(invitationId: string, accept: boolean) {
+		// Find the invitation BEFORE removing it
+		const invitation = invitations.find((i) => i.id === invitationId);
+		const eventId = invitation?.event.id;
+
 		responding = invitationId;
 		try {
 			await respondToEventInvitation(invitationId, accept);
-			// Remove from list after responding
-			invitations = invitations.filter((i) => i.id !== invitationId);
+
+			// Remove from list with animation after responding
+			removeInvitationWithAnimation(invitationId);
 
 			// If accepted, navigate to the event
-			const invitation = invitations.find((i) => i.id === invitationId);
-			if (accept && invitation) {
-				goto(`/events/${invitation.event.id}`);
+			if (accept && eventId) {
+				goto(`/events/${eventId}`);
 			}
 		} catch (err) {
 			console.error('Failed to respond:', err);
@@ -84,8 +126,15 @@
 				<div class="mb-8">
 					<h2 class="mb-4 text-lg font-semibold">Pending Invitations ({invitations.length})</h2>
 					<div class="space-y-3">
-						{#each invitations as invitation}
-							<div class="glass-card bg-card overflow-hidden rounded-xl border border-white/10">
+						{#each invitations as invitation (invitation.id)}
+							<div
+								class="glass-card bg-card overflow-hidden rounded-xl border border-white/10 transition-all duration-300 {removingIds.has(
+									invitation.id
+								)
+									? 'scale-95 opacity-0'
+									: ''}"
+								out:fly={{ x: -100, duration: 300 }}
+							>
 								<!-- Clickable Event Info -->
 								<button
 									class="flex w-full gap-4 p-4 text-left transition-colors hover:bg-white/5"

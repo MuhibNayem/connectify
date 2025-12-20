@@ -3,6 +3,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import EventCard from '$lib/components/events/EventCard.svelte';
 	import EventsSidebar from '$lib/components/events/EventsSidebar.svelte';
+	import EventRecommendations from '$lib/components/events/EventRecommendations.svelte';
+	import EventTrending from '$lib/components/events/EventTrending.svelte';
 	import { Gift, ChevronRight, Loader2, Calendar, MapPin, Search, Filter } from '@lucide/svelte';
 	import {
 		getEvents,
@@ -193,6 +195,12 @@
 					</a>
 				</div>
 			{/if}
+
+			<!-- Trending & Recommendations -->
+			<div class="mb-10 space-y-10">
+				<EventTrending />
+				<EventRecommendations />
+			</div>
 
 			<!-- Birthdays Widget -->
 			{#if birthdays.today.length > 0}

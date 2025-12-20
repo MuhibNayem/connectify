@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { X, Search, Check, Loader2, Send, Users } from '@lucide/svelte';
-	import { getFriends, inviteFriendsToEvent } from '$lib/api';
+	import { X, Search, Check, Loader2, Send, Users, Star, UserCheck } from '@lucide/svelte';
+	import { getFriends, inviteFriendsToEvent, getEventAttendees } from '$lib/api';
 	import type { User } from '$lib/types';
 
 	let {
@@ -18,24 +18,53 @@
 		onClose?: () => void;
 	} = $props();
 
-	let friends: User[] = $state([]);
+	interface FriendWithStatus extends User {
+		eventStatus?: 'going' | 'interested' | 'invited' | null;
+	}
+
+	let friends: FriendWithStatus[] = $state([]);
 	let selectedIds: Set<string> = $state(new Set());
 	let searchQuery = $state('');
 	let loading = $state(false);
 	let sending = $state(false);
 	let message = $state('');
 
+	// Track already attending/interested user IDs
+	let attendingUserIds = $state<Set<string>>(new Set());
+
 	onMount(async () => {
 		loading = true;
 		try {
-			friends = await getFriends();
+			// Fetch friends and attendees in parallel
+			const [friendsList, attendeesRes] = await Promise.all([
+				getFriends(),
+				getEventAttendees(eventId, undefined, 1, 500) // Get all attendees
+			]);
+
+			// Build set of user IDs who are already going/interested
+			const attendees = attendeesRes.attendees || [];
+			const statusMap = new Map<string, string>();
+
+			attendees.forEach((a: any) => {
+				if (a.status === 'going' || a.status === 'interested') {
+					attendingUserIds.add(a.user.id);
+					statusMap.set(a.user.id, a.status);
+				}
+			});
+
+			// Mark friends with their event status
+			friends = friendsList.map((f: User) => ({
+				...f,
+				eventStatus: (statusMap.get(f.id) as 'going' | 'interested' | null) || null
+			}));
 		} catch (err) {
-			console.error('Failed to load friends:', err);
+			console.error('Failed to load data:', err);
 		} finally {
 			loading = false;
 		}
 	});
 
+	// Filter friends: show all but disable already attending
 	let filteredFriends = $derived(
 		friends.filter(
 			(f) =>
@@ -44,20 +73,27 @@
 		)
 	);
 
+	// Friends available for invitation (not already attending)
+	let invitableFriends = $derived(filteredFriends.filter((f) => !f.eventStatus));
+
 	function toggleSelect(id: string) {
+		// Don't allow selecting already attending users
+		const friend = friends.find((f) => f.id === id);
+		if (friend?.eventStatus) return;
+
 		if (selectedIds.has(id)) {
 			selectedIds.delete(id);
 		} else {
 			selectedIds.add(id);
 		}
-		selectedIds = new Set(selectedIds); // Trigger reactivity
+		selectedIds = new Set(selectedIds);
 	}
 
 	function selectAll() {
-		if (selectedIds.size === filteredFriends.length) {
+		if (selectedIds.size === invitableFriends.length) {
 			selectedIds.clear();
 		} else {
-			filteredFriends.forEach((f) => selectedIds.add(f.id));
+			invitableFriends.forEach((f) => selectedIds.add(f.id));
 		}
 		selectedIds = new Set(selectedIds);
 	}
@@ -83,6 +119,17 @@
 		message = '';
 		searchQuery = '';
 		onClose?.();
+	}
+
+	function getStatusLabel(status: string | null | undefined): string {
+		switch (status) {
+			case 'going':
+				return 'Going';
+			case 'interested':
+				return 'Interested';
+			default:
+				return '';
+		}
 	}
 </script>
 
@@ -138,37 +185,44 @@
 					</div>
 				{:else}
 					<div class="divide-y divide-white/5">
-						<!-- Select All -->
-						<button
-							class="flex w-full items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-white/5"
-							onclick={selectAll}
-						>
-							<div
-								class="flex h-5 w-5 items-center justify-center rounded border {selectedIds.size ===
-									filteredFriends.length && filteredFriends.length > 0
-									? 'border-primary bg-primary'
-									: 'border-white/30'}"
-							>
-								{#if selectedIds.size === filteredFriends.length && filteredFriends.length > 0}
-									<Check size={12} class="text-white" />
-								{/if}
-							</div>
-							<span class="font-medium">Select All ({filteredFriends.length})</span>
-						</button>
-
-						{#each filteredFriends as friend}
+						<!-- Select All (only for invitable friends) -->
+						{#if invitableFriends.length > 0}
 							<button
-								class="flex w-full items-center gap-3 px-4 py-3 transition-colors hover:bg-white/5"
-								onclick={() => toggleSelect(friend.id)}
+								class="flex w-full items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-white/5"
+								onclick={selectAll}
 							>
 								<div
-									class="flex h-5 w-5 items-center justify-center rounded border {selectedIds.has(
-										friend.id
-									)
+									class="flex h-5 w-5 items-center justify-center rounded border {selectedIds.size ===
+										invitableFriends.length && invitableFriends.length > 0
 										? 'border-primary bg-primary'
 										: 'border-white/30'}"
 								>
-									{#if selectedIds.has(friend.id)}
+									{#if selectedIds.size === invitableFriends.length && invitableFriends.length > 0}
+										<Check size={12} class="text-white" />
+									{/if}
+								</div>
+								<span class="font-medium">Select All ({invitableFriends.length} available)</span>
+							</button>
+						{/if}
+
+						{#each filteredFriends as friend}
+							<button
+								class="flex w-full items-center gap-3 px-4 py-3 transition-colors {friend.eventStatus
+									? 'cursor-not-allowed opacity-50'
+									: 'hover:bg-white/5'}"
+								onclick={() => toggleSelect(friend.id)}
+								disabled={!!friend.eventStatus}
+							>
+								<div
+									class="flex h-5 w-5 items-center justify-center rounded border {friend.eventStatus
+										? 'border-green-500 bg-green-500/20'
+										: selectedIds.has(friend.id)
+											? 'border-primary bg-primary'
+											: 'border-white/30'}"
+								>
+									{#if friend.eventStatus}
+										<UserCheck size={12} class="text-green-400" />
+									{:else if selectedIds.has(friend.id)}
 										<Check size={12} class="text-white" />
 									{/if}
 								</div>
@@ -177,10 +231,24 @@
 									alt=""
 									class="h-10 w-10 rounded-full object-cover"
 								/>
-								<div class="text-left">
+								<div class="flex-1 text-left">
 									<div class="font-medium">{friend.full_name || friend.username}</div>
 									<div class="text-muted-foreground text-xs">@{friend.username}</div>
 								</div>
+								{#if friend.eventStatus}
+									<span
+										class="flex items-center gap-1 text-xs {friend.eventStatus === 'going'
+											? 'text-green-400'
+											: 'text-yellow-400'}"
+									>
+										{#if friend.eventStatus === 'going'}
+											<Check size={12} />
+										{:else}
+											<Star size={12} />
+										{/if}
+										{getStatusLabel(friend.eventStatus)}
+									</span>
+								{/if}
 							</button>
 						{/each}
 					</div>

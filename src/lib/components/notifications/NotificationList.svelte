@@ -178,6 +178,10 @@
 					return `<span class="font-bold">${senderUsername}</span> invited you to <span class="font-bold">${eventTitle}</span>.`;
 				case 'EVENT_REMINDER':
 					return `Reminder: <span class="font-bold">${eventTitle}</span> is starting soon!`;
+				case 'EVENT_INVITE_ACCEPTED':
+					return `<span class="font-bold">${senderUsername}</span> accepted your invitation to <span class="font-bold">${eventTitle}</span>.`;
+				case 'EVENT_INVITE_DECLINED':
+					return `<span class="font-bold">${senderUsername}</span> declined your invitation to <span class="font-bold">${eventTitle}</span>.`;
 			}
 		}
 
@@ -258,7 +262,7 @@
 						<div
 							class="ring-background absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-[14px] text-white shadow-sm ring-2"
 						>
-							{#if notification.type === 'LIKE'}👍{:else if notification.type === 'COMMENT'}💬{:else if notification.type === 'MENTION'}@{:else if notification.type === 'EVENT_INVITE'}📅{:else if notification.type === 'EVENT_REMINDER'}⏰{:else if notification.type === 'FRIEND_REQUEST'}👥{:else}🔔{/if}
+							{#if notification.type === 'LIKE'}👍{:else if notification.type === 'COMMENT'}💬{:else if notification.type === 'MENTION'}@{:else if notification.type === 'EVENT_INVITE'}📅{:else if notification.type === 'EVENT_REMINDER'}⏰{:else if notification.type === 'FRIEND_REQUEST'}👥{:else if notification.type === 'EVENT_INVITE_ACCEPTED'}✅{:else if notification.type === 'EVENT_INVITE_DECLINED'}❌{:else}🔔{/if}
 						</div>
 					</div>
 

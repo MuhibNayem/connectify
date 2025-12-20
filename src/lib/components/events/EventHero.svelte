@@ -17,6 +17,7 @@
 	import { goto } from '$app/navigation';
 	import EventShareModal from './EventShareModal.svelte';
 	import EventInviteModal from './EventInviteModal.svelte';
+	import { websocketMessages } from '$lib/websocket';
 
 	let {
 		event,
@@ -38,6 +39,16 @@
 	// Local stats state that updates optimistically
 	let goingCount = $state(event.stats.going_count);
 	let interestedCount = $state(event.stats.interested_count);
+
+	$effect(() => {
+		const msg = $websocketMessages;
+		if (msg?.type === 'EVENT_RSVP_UPDATE' && msg.data.event_id === event.id) {
+			if (msg.data.stats) {
+				goingCount = msg.data.stats.going_count;
+				interestedCount = msg.data.stats.interested_count;
+			}
+		}
+	});
 
 	function formatFullDate(start: string, end?: string) {
 		const s = new Date(start);

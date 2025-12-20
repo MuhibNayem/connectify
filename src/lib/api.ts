@@ -956,3 +956,27 @@ export async function getAlbumMedia(albumId: string, limit: number = 20, page: n
 	if (type) params.append('type', type);
 	return apiRequest('GET', `/albums/${albumId}/media?${params.toString()}`);
 }
+
+// Event Recommendations & Trending
+export interface EventRecommendation {
+	event_id: string;
+	score: number;
+	event?: Event;
+	friends_going: import('./types').User[];
+	friend_count: number;
+	reason: string;
+}
+
+export interface TrendingEvent {
+	event_id: string;
+	score: number;
+	event?: Event;
+}
+
+export async function getEventRecommendations(limit: number = 10): Promise<EventRecommendation[]> {
+	return apiRequest('GET', `/events/recommendations?limit=${limit}`);
+}
+
+export async function getTrendingEvents(limit: number = 10): Promise<TrendingEvent[]> {
+	return apiRequest('GET', `/events/trending?limit=${limit}`);
+}
