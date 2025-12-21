@@ -1,108 +1,137 @@
 <script lang="ts">
-    import { apiRequest } from '$lib/api';
-    import { auth } from '$lib/stores/auth.svelte';
-    import { onMount } from 'svelte';
-    import { Button } from '$lib/components/ui/button';
-    import { presenceStore } from '$lib/stores/presence';
+	import { apiRequest } from '$lib/api';
+	import { auth } from '$lib/stores/auth.svelte';
+	import { onMount } from 'svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { presenceStore } from '$lib/stores/presence';
+	import { MoreHorizontal, UserMinus } from '@lucide/svelte';
 
-    interface FriendUser {
-        id: string;
-        username: string;
-        avatar?: string;
-    }
+	let { limit = undefined } = $props();
 
-    interface Friendship {
-        id: string;
-        requester_id: string;
-        receiver_id: string;
-        status: 'pending' | 'accepted' | 'rejected';
-    }
+	interface FriendUser {
+		id: string;
+		username: string;
+		avatar?: string;
+	}
 
-    let friends: FriendUser[] = [];
-    let loading = true;
-    let error: string | null = null;
+	interface Friendship {
+		id: string;
+		requester_id: string;
+		receiver_id: string;
+		status: 'pending' | 'accepted' | 'rejected';
+	}
 
-    $: currentUserId = auth.state.user?.id;
+	let friends = $state<FriendUser[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
 
-    onMount(async () => {
-        if (!currentUserId) {
-            error = "User not authenticated.";
-            loading = false;
-            return;
-        }
-        await fetchFriends();
-    });
+	let currentUserId = $derived(auth.state.user?.id);
+	let displayedFriends = $derived(limit ? friends.slice(0, limit) : friends);
 
-    async function fetchFriends() {
-        loading = true;
-        error = null;
-        try {
-            const response = await apiRequest('GET', '/friendships?status=accepted', undefined, true);
-            const acceptedFriendships: Friendship[] = response.data;
+	onMount(async () => {
+		if (!currentUserId) {
+			error = 'User not authenticated.';
+			loading = false;
+			return;
+		}
+		await fetchFriends();
+	});
 
-            const friendUserPromises = (acceptedFriendships ?? []).map(async (friendship) => {
-                const friendId = friendship.requester_id === currentUserId ? friendship.receiver_id : friendship.requester_id;
-                const friendDetails = await apiRequest('GET', `/users/${friendId}`, undefined, true);
-                return {
-                    id: friendDetails.id,
-                    username: friendDetails.username,
-                    avatar: friendDetails.avatar,
-                };
-            });
+	async function fetchFriends() {
+		loading = true;
+		error = null;
+		try {
+			const response = await apiRequest('GET', '/friendships?status=accepted', undefined, true);
+			const acceptedFriendships: Friendship[] = response.data;
 
-            friends = await Promise.all(friendUserPromises);
+			const friendUserPromises = (acceptedFriendships ?? []).map(async (friendship) => {
+				const friendId =
+					friendship.requester_id === currentUserId
+						? friendship.receiver_id
+						: friendship.requester_id;
+				const friendDetails = await apiRequest('GET', `/users/${friendId}`, undefined, true);
+				return {
+					id: friendDetails.id,
+					username: friendDetails.username,
+					avatar: friendDetails.avatar
+				};
+			});
 
-        } catch (e: any) {
-            error = e.message || 'Failed to load friend list.';
-            console.error(e);
-        } finally {
-            loading = false;
-        }
-    }
+			friends = await Promise.all(friendUserPromises);
+		} catch (e: any) {
+			error = e.message || 'Failed to load friend list.';
+			console.error(e);
+		} finally {
+			loading = false;
+		}
+	}
 
-    async function handleUnfriend(friendId: string) {
-        if (confirm(`Are you sure you want to unfriend ${friends.find(f => f.id === friendId)?.username}?`)) {
-            try {
-                await apiRequest('DELETE', `/friendships/${friendId}`, undefined, true);
-                friends = friends.filter(f => f.id !== friendId);
-                alert('Unfriended successfully!');
-            } catch (e: any) {
-                alert(`Failed to unfriend: ${e.message}`);
-                console.error(e);
-            }
-        }
-    }
+	async function handleUnfriend(friendId: string) {
+		if (
+			confirm(
+				`Are you sure you want to unfriend ${friends.find((f) => f.id === friendId)?.username}?`
+			)
+		) {
+			try {
+				await apiRequest('DELETE', `/friendships/${friendId}`, undefined, true);
+				friends = friends.filter((f) => f.id !== friendId);
+			} catch (e: any) {
+				alert(`Failed to unfriend: ${e.message}`);
+				console.error(e);
+			}
+		}
+	}
 </script>
 
 <div class="space-y-4">
-    {#if loading}
-        <p class="text-center text-gray-600">Loading friends...</p>
-    {:else if error}
-        <p class="text-center text-red-600">Error: {error}</p>
-    {:else if friends.length === 0}
-        <p class="text-center text-gray-600">You don't have any friends yet.</p>
-    {:else}
-        <ul class="space-y-3">
-            {#each (friends ?? []) as friend (friend.id)}
-                <li class="flex items-center justify-between p-3 bg-gray-50 rounded-lg shadow-sm">
-                    <div class="flex items-center space-x-3">
-                        <div class="relative">
-                            <div class="w-10 h-10 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 font-bold">
-                                {#if friend.avatar}
-                                    <img src={friend.avatar} alt={friend.username} class="w-full h-full rounded-full object-cover" />
-                                {:else}
-                                    {friend.username.substring(0, 2).toUpperCase()}
-                                {/if}
-                            </div>
-                            {#if $presenceStore[friend.id]?.status === 'online'}
-                                <span class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white"></span>
-                            {/if}
-                        </div>
-                        <span class="font-medium text-gray-800">{friend.username}</span>
-                    </div>
-                    <Button variant="destructive" size="sm" onclick={() => handleUnfriend(friend.id)}>Unfriend</Button>
-                </li>
-            {/each}
-        </ul>
-    {/if}
+	{#if loading}
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+			{#each Array(limit || 8) as _}
+				<div class="glass-card h-24 animate-pulse rounded-xl"></div>
+			{/each}
+		</div>
+	{:else if error}
+		<div class="glass-panel p-4 text-center text-red-500">{error}</div>
+	{:else if friends.length === 0}
+		<div class="glass-panel text-muted-foreground p-8 text-center">No friends to display.</div>
+	{:else}
+		<!-- Correct Grid Loop -->
+		<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+			{#each displayedFriends as friend (friend.id)}
+				<div class="glass-card group flex items-center justify-between rounded-xl p-4">
+					<div class="flex items-center space-x-4 overflow-hidden">
+						<div class="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full bg-white/10">
+							{#if friend.avatar}
+								<img src={friend.avatar} alt={friend.username} class="h-full w-full object-cover" />
+							{:else}
+								<div class="flex h-full w-full items-center justify-center text-xl font-bold">
+									{friend.username[0]}
+								</div>
+							{/if}
+							{#if $presenceStore[friend.id]?.status === 'online'}
+								<div
+									class="absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-black bg-green-500"
+								></div>
+							{/if}
+						</div>
+						<div class="min-w-0">
+							<h3 class="truncate text-lg font-bold">{friend.username}</h3>
+							<button class="text-muted-foreground text-xs hover:underline"
+								>12 Mutual Friends</button
+							>
+						</div>
+					</div>
+
+					<Button
+						variant="ghost"
+						size="icon"
+						class="text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+						onclick={() => handleUnfriend(friend.id)}
+					>
+						<UserMinus size={20} />
+					</Button>
+				</div>
+			{/each}
+		</div>
+	{/if}
 </div>

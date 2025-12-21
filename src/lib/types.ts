@@ -6,6 +6,8 @@ export interface Reaction {
 
 export interface Message {
 	id: string;
+	string_id?: string; // Mapped from Cassandra UUID
+	_legacy_id?: string; // Original Mongo ObjectID for legacy WS events
 	sender_id: string;
 	sender_name?: string;
 	receiver_id?: string;
@@ -23,8 +25,23 @@ export interface Message {
 	edited_at?: string; // Added
 	reactions?: Reaction[];
 	reply_to_message_id?: string; // Added
+	product_id?: string; // Added for marketplace
+	is_marketplace?: boolean; // Marketplace context flag
+	// Embedded product data (populated by backend $lookup for optimization)
+	product?: {
+		id: string;
+		title: string;
+		price: number;
+		currency: string;
+		images?: string[];
+		status: string;
+	};
 	created_at: string;
 	updated_at?: string;
+	// E2EE
+	is_encrypted?: boolean;
+	iv?: string;
+	_is_decrypted?: boolean; // Client-side flag
 	// Potentially add sender/receiver/group objects if populated by backend
 	sender?: {
 		id: string;
@@ -77,6 +94,12 @@ export interface User {
 	privacy_settings?: PrivacySettings;
 	notification_settings?: NotificationSettings;
 	created_at?: string;
+	// E2EE
+	public_key?: string;
+	encrypted_private_key?: string;
+	key_backup_iv?: string;
+	key_backup_salt?: string;
+	is_encryption_enabled?: boolean;
 }
 
 export interface PrivacySettings {
@@ -121,6 +144,7 @@ export interface Post {
 	total_reactions: number;
 	total_comments: number;
 	community_id?: string;
+	status?: 'active' | 'pending' | 'declined';
 }
 
 export interface FeedResponse {

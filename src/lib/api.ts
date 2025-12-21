@@ -30,6 +30,8 @@ export interface Message {
 	edited_at?: string;
 	reactions?: MessageReaction[];
 	reply_to_message_id?: string;
+	product_id?: string;
+	is_marketplace?: boolean;
 	created_at: string;
 	updated_at?: string;
 }
@@ -42,6 +44,8 @@ export interface MessageRequest {
 	content_type: string;
 	media_urls?: string[];
 	reply_to_message_id?: string;
+	product_id?: string;
+	is_marketplace?: boolean;
 }
 
 export interface MessageResponse {
@@ -61,6 +65,7 @@ export interface ConversationSummary {
 	last_message_timestamp?: string;
 	last_message_sender_id?: string;
 	last_message_sender_name?: string;
+	last_message_is_encrypted?: boolean;
 	unread_count: number;
 }
 
@@ -132,6 +137,38 @@ export interface SuccessResponse {
 
 export interface ErrorResponse {
 	error: string;
+}
+
+// Privacy settings type
+export type PrivacyType = 'PUBLIC' | 'FRIENDS' | 'ONLY_ME' | 'FRIENDS_OF_FRIENDS' | 'CUSTOM';
+
+// Album types
+export type AlbumType = 'custom' | 'profile' | 'cover' | 'timeline';
+
+export interface Album {
+	id: string;
+	user_id: string;
+	name: string;
+	description?: string;
+	type: AlbumType;
+	cover_url?: string;
+	post_ids: string[];
+	privacy: PrivacyType;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface CreateAlbumRequest {
+	name: string;
+	description?: string;
+	privacy?: PrivacyType;
+}
+
+export interface UpdateAlbumRequest {
+	name?: string;
+	description?: string;
+	cover_url?: string;
+	privacy?: PrivacyType;
 }
 
 export interface UnreadCountResponse {
@@ -315,13 +352,15 @@ export async function getUserGroups(): Promise<GroupResponse[]> {
 	return apiRequest('GET', '/groups', undefined, true);
 }
 
-export async function getMessages(params: { receiverID?: string; groupID?: string; page?: number; limit?: number; before?: string }): Promise<MessageResponse> {
+export async function getMessages(params: { receiverID?: string; groupID?: string; conversationID?: string; page?: number; limit?: number; before?: string; marketplace?: boolean }): Promise<MessageResponse> {
 	const query = new URLSearchParams();
 	if (params.receiverID) query.set('receiverID', params.receiverID);
 	if (params.groupID) query.set('groupID', params.groupID);
+	if (params.conversationID) query.set('conversationID', params.conversationID);
 	if (params.page) query.set('page', String(params.page));
 	if (params.limit) query.set('limit', String(params.limit));
 	if (params.before) query.set('before', params.before);
+	if (params.marketplace) query.set('marketplace', 'true');
 
 	return apiRequest('GET', `/messages?${query.toString()}`, undefined, true);
 }
@@ -330,20 +369,20 @@ export async function sendMessage(payload: MessageRequest | FormData): Promise<M
 	return apiRequest('POST', '/messages', payload, true);
 }
 
-export async function markMessagesAsSeen(messageIds: string[]): Promise<void> {
-	await apiRequest('POST', '/messages/seen', messageIds, true);
+export async function markMessagesAsSeen(conversationId: string, messageIds: string[]): Promise<void> {
+	await apiRequest('POST', '/messages/seen', { conversation_id: conversationId, message_ids: messageIds }, true);
 }
 
-export async function markMessagesAsDelivered(messageIds: string[]): Promise<void> {
-	await apiRequest('POST', '/messages/delivered', messageIds, true);
+export async function markMessagesAsDelivered(conversationId: string, messageIds: string[]): Promise<void> {
+	await apiRequest('POST', '/messages/delivered', { conversation_id: conversationId, message_ids: messageIds }, true);
 }
 
 export async function getUnreadMessageCount(): Promise<UnreadCountResponse> {
 	return apiRequest('GET', '/messages/unread', undefined, true);
 }
 
-export async function deleteMessage(messageId: string): Promise<SuccessResponse> {
-	return apiRequest('DELETE', `/messages/${messageId}`, undefined, true);
+export async function deleteMessage(messageId: string, conversationId: string): Promise<SuccessResponse> {
+	return apiRequest('DELETE', `/messages/${messageId}?conversation_id=${conversationId}`, undefined, true);
 }
 
 export async function editMessage(messageId: string, content: string): Promise<Message> {
@@ -370,9 +409,19 @@ export async function getConversationSummaries(): Promise<ConversationSummary[]>
 	return apiRequest('GET', '/conversations', undefined, true);
 }
 
-export async function markConversationAsSeen(conversationId: string, timestamp: string, isGroup: boolean): Promise<void> {
-	const [type, id] = conversationId.split('-');
-	await apiRequest('POST', `/conversations/${id}/seen`, { timestamp, is_group: isGroup }, true);
+export async function markConversationAsSeen(
+	conversationId: string,
+	timestamp: string,
+	isGroup: boolean,
+	conversationKey?: string
+): Promise<void> {
+	const parts = conversationId.split('-');
+	const id = parts.length > 1 ? parts[1] : parts[0];
+	const payload: Record<string, any> = { timestamp, is_group: isGroup };
+	if (conversationKey) {
+		payload.conversation_key = conversationKey;
+	}
+	await apiRequest('POST', `/conversations/${id}/seen`, payload, true);
 }
 
 export interface GroupResponse {
@@ -455,6 +504,10 @@ export async function register(userData: any): Promise<any> {
 	return apiRequest('POST', '/auth/register', userData, false);
 }
 
+export async function updatePost(postId: string, data: any): Promise<any> {
+	return apiRequest('PUT', `/posts/${postId}`, data, true);
+}
+
 // Note: updateUserProfile returns the updated user object
 export async function updateUserProfile(data: any): Promise<import('$lib/types').User> {
 	return apiRequest('PUT', '/users/me', data, true);
@@ -474,6 +527,26 @@ export async function uploadFiles(files: File[]): Promise<{ url: string; type: s
 	return apiRequest('POST', '/upload', formData, true);
 }
 
+export async function getUserByID(userId: string): Promise<import('$lib/types').User> {
+	return apiRequest('GET', `/users/${userId}`, undefined, true);
+}
+
+// E2EE Key Management
+export interface UserKeys {
+	public_key: string;
+	encrypted_private_key?: string;
+	key_backup_iv?: string;
+	key_backup_salt?: string;
+}
+
+export async function updateUserKeys(keys: UserKeys): Promise<void> {
+	return apiRequest('PUT', '/users/me/keys', keys, true);
+}
+
+// Note: getUserPublicKey logic effectively just reuses getUserProfile / getUserById
+// but we add a semantic helper if needed. For now, we rely on the User object having public_key.
+
+
 
 // Community Types & APIs
 
@@ -482,6 +555,7 @@ export type CommunityPrivacy = 'public' | 'closed' | 'secret';
 export interface CommunitySettings {
 	require_post_approval: boolean;
 	require_join_approval: boolean;
+	allow_member_posts?: boolean;
 }
 
 export interface CommunityStats {
@@ -498,6 +572,7 @@ export interface Community {
 	avatar: string;
 	cover_image: string;
 	privacy: CommunityPrivacy;
+	visibility: 'visible' | 'hidden';
 	settings: CommunitySettings;
 	stats: CommunityStats;
 	is_member?: boolean;
@@ -513,6 +588,7 @@ export interface CreateCommunityRequest {
 	privacy: CommunityPrivacy;
 	require_post_approval: boolean;
 	require_join_approval: boolean;
+	allow_member_posts?: boolean;
 }
 
 export interface UpdateCommunityRequest {
@@ -522,8 +598,10 @@ export interface UpdateCommunityRequest {
 	avatar?: string;
 	cover_image?: string;
 	privacy?: CommunityPrivacy;
+	visibility?: 'visible' | 'hidden';
 	require_post_approval?: boolean;
 	require_join_approval?: boolean;
+	allow_member_posts?: boolean;
 }
 
 export async function createCommunity(data: CreateCommunityRequest): Promise<Community> {
@@ -580,15 +658,325 @@ export async function getCommunityPendingMembers(communityId: string, page = 1, 
 
 
 // Feed API
-export async function getPosts(params: { page?: number; limit?: number; community_id?: string; user_id?: string }): Promise<import('./types').FeedResponse> {
+export async function getPosts(params: { page?: number; limit?: number; community_id?: string; user_id?: string; status?: string; sort?: string }): Promise<import('./types').FeedResponse> {
 	const query = new URLSearchParams();
 	if (params.page) query.set('page', String(params.page));
 	if (params.limit) query.set('limit', String(params.limit));
 	if (params.community_id) query.set('community_id', params.community_id);
 	if (params.user_id) query.set('user_id', params.user_id);
+	if (params.status) query.set('status', params.status);
+	if (params.sort) query.set('sort', params.sort);
 	return apiRequest('GET', `/posts?${query.toString()}`, undefined, true);
 }
 
 export async function createPost(data: FormData | any): Promise<import('./types').Post> {
 	return apiRequest('POST', '/posts', data, true);
+}
+
+export async function updatePostStatus(postId: string, status: 'active' | 'pending' | 'declined'): Promise<void> {
+	return apiRequest('PUT', `/posts/${postId}/status`, { status }, true);
+}
+
+// --- Event Types & APIs ---
+
+export type EventPrivacy = 'public' | 'private' | 'friends';
+export type RSVPStatus = 'going' | 'interested' | 'invited' | 'not_going';
+export type EventInvitationStatus = 'pending' | 'accepted' | 'declined';
+
+export interface EventStats {
+	going_count: number;
+	interested_count: number;
+	invited_count: number;
+	share_count: number;
+}
+
+export interface Event {
+	id: string;
+	title: string;
+	description: string;
+	start_date: string; // ISO Date
+	end_date?: string; // ISO Date
+	location: string;
+	is_online: boolean;
+	privacy: EventPrivacy;
+	category: string;
+	cover_image: string;
+	creator: UserShortResponse;
+	stats: EventStats;
+	my_status?: RSVPStatus;
+	is_host: boolean;
+	friends_going?: UserShortResponse[]; // Friends who are going to this event
+	created_at: string;
+}
+
+export interface CreateEventRequest {
+	title: string;
+	description: string;
+	start_date: string;
+	end_date?: string;
+	location?: string;
+	is_online: boolean;
+	privacy: EventPrivacy;
+	category?: string;
+	cover_image?: string;
+}
+
+export interface UpdateEventRequest {
+	title?: string;
+	description?: string;
+	start_date?: string;
+	end_date?: string;
+	location?: string;
+	is_online?: boolean;
+	privacy?: EventPrivacy;
+	category?: string;
+	cover_image?: string;
+}
+
+// Event Invitation Types
+export interface EventShort {
+	id: string;
+	title: string;
+	cover_image: string;
+	start_date: string;
+	location: string;
+}
+
+export interface EventInvitation {
+	id: string;
+	event: EventShort;
+	inviter: UserShortResponse;
+	status: EventInvitationStatus;
+	message?: string;
+	created_at: string;
+}
+
+// Event Discussion/Post Types
+export interface EventPostReaction {
+	user: UserShortResponse;
+	emoji: string;
+	timestamp: string;
+}
+
+export interface EventPost {
+	id: string;
+	author: UserShortResponse;
+	content: string;
+	media_urls?: string[];
+	reactions: EventPostReaction[];
+	created_at: string;
+}
+
+// Event Attendee Types
+export interface EventAttendee {
+	user: UserShortResponse;
+	status: RSVPStatus;
+	timestamp: string;
+	is_host: boolean;
+	is_co_host: boolean;
+}
+
+export interface AttendeesListResponse {
+	attendees: EventAttendee[];
+	total: number;
+	page: number;
+	limit: number;
+}
+
+// Event Category Types
+export interface EventCategory {
+	name: string;
+	icon?: string;
+	count: number;
+}
+
+// Birthday Types
+export interface BirthdayUser {
+	id: string;
+	username: string;
+	full_name: string;
+	avatar: string;
+	age: number;
+	date: string;
+}
+
+export interface BirthdayResponse {
+	today: BirthdayUser[];
+	upcoming: BirthdayUser[];
+}
+
+// Search Types
+export interface SearchEventsParams {
+	q?: string;
+	category?: string;
+	period?: 'today' | 'tomorrow' | 'this_week' | 'this_weekend';
+	start_date?: string;
+	end_date?: string;
+	online?: boolean;
+	page?: number;
+	limit?: number;
+}
+
+// ============ Event APIs ============
+
+export async function createEvent(data: CreateEventRequest): Promise<Event> {
+	return apiRequest('POST', '/events', data);
+}
+
+export async function getEvents(page = 1, limit = 10, params?: { category?: string; period?: string; q?: string }): Promise<{ events: Event[]; total: number }> {
+	const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+	if (params?.category) query.set('category', params.category);
+	if (params?.period) query.set('period', params.period);
+	if (params?.q) query.set('q', params.q);
+	return apiRequest('GET', `/events?${query.toString()}`);
+}
+
+export async function getMyEvents(page = 1, limit = 10): Promise<Event[]> {
+	return apiRequest('GET', `/events/my-events?page=${page}&limit=${limit}`);
+}
+
+export async function getBirthdays(): Promise<BirthdayResponse> {
+	return apiRequest('GET', '/events/birthdays');
+}
+
+export async function getEvent(id: string): Promise<Event> {
+	return apiRequest('GET', `/events/${id}`);
+}
+
+export async function updateEvent(id: string, data: UpdateEventRequest): Promise<Event> {
+	return apiRequest('PUT', `/events/${id}`, data);
+}
+
+export async function deleteEvent(id: string): Promise<void> {
+	return apiRequest('DELETE', `/events/${id}`);
+}
+
+export async function rsvpEvent(id: string, status: RSVPStatus): Promise<void> {
+	return apiRequest('POST', `/events/${id}/rsvp`, { status });
+}
+
+// Search & Discovery
+export async function searchEvents(params: SearchEventsParams): Promise<{ events: Event[]; total: number; page: number; limit: number }> {
+	const query = new URLSearchParams();
+	if (params.q) query.set('q', params.q);
+	if (params.category) query.set('category', params.category);
+	if (params.period) query.set('period', params.period);
+	if (params.start_date) query.set('start_date', params.start_date);
+	if (params.end_date) query.set('end_date', params.end_date);
+	if (params.online !== undefined) query.set('online', String(params.online));
+	query.set('page', String(params.page || 1));
+	query.set('limit', String(params.limit || 20));
+	return apiRequest('GET', `/events/search?${query.toString()}`);
+}
+
+export async function getNearbyEvents(lat: number, lng: number, radius = 50, page = 1, limit = 20): Promise<{ events: Event[]; total: number }> {
+	return apiRequest('GET', `/events/nearby?lat=${lat}&lng=${lng}&radius=${radius}&page=${page}&limit=${limit}`);
+}
+
+export async function getEventCategories(): Promise<{ categories: EventCategory[] }> {
+	return apiRequest('GET', '/events/categories');
+}
+
+// Invitations
+export async function inviteFriendsToEvent(eventId: string, friendIds: string[], message?: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/invite`, { friend_ids: friendIds, message });
+}
+
+export async function getEventInvitations(page = 1, limit = 10): Promise<{ invitations: EventInvitation[]; total: number }> {
+	return apiRequest('GET', `/events/invitations?page=${page}&limit=${limit}`);
+}
+
+export async function respondToEventInvitation(invitationId: string, accept: boolean): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/invitations/${invitationId}/respond`, { accept });
+}
+
+// Attendees
+export async function getEventAttendees(eventId: string, status?: RSVPStatus, page = 1, limit = 20): Promise<AttendeesListResponse> {
+	const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+	if (status) query.set('status', status);
+	return apiRequest('GET', `/events/${eventId}/attendees?${query.toString()}`);
+}
+
+// Discussion Posts
+export async function createEventPost(eventId: string, content: string, mediaUrls?: string[]): Promise<EventPost> {
+	return apiRequest('POST', `/events/${eventId}/posts`, { content, media_urls: mediaUrls });
+}
+
+export async function getEventPosts(eventId: string, page = 1, limit = 20): Promise<{ posts: EventPost[]; total: number }> {
+	return apiRequest('GET', `/events/${eventId}/posts?page=${page}&limit=${limit}`);
+}
+
+export async function deleteEventPost(eventId: string, postId: string): Promise<void> {
+	return apiRequest('DELETE', `/events/${eventId}/posts/${postId}`);
+}
+
+export async function reactToEventPost(eventId: string, postId: string, emoji: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/posts/${postId}/react`, { emoji });
+}
+
+// Co-hosts
+export async function addEventCoHost(eventId: string, userId: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/co-hosts`, { user_id: userId });
+}
+
+export async function removeEventCoHost(eventId: string, userId: string): Promise<void> {
+	return apiRequest('DELETE', `/events/${eventId}/co-hosts/${userId}`);
+}
+
+// Sharing
+export async function shareEvent(eventId: string): Promise<{ success: boolean }> {
+	return apiRequest('POST', `/events/${eventId}/share`);
+}
+
+
+// --- Album API Functions ---
+
+export async function createAlbum(data: CreateAlbumRequest): Promise<Album> {
+	return apiRequest('POST', '/albums', data);
+}
+
+export async function getAlbum(albumId: string): Promise<Album> {
+	return apiRequest('GET', `/albums/${albumId}`);
+}
+
+export async function getUserAlbums(userId: string, limit: number = 20, offset: number = 0): Promise<Album[]> {
+	return apiRequest('GET', `/users/${userId}/albums?limit=${limit}&offset=${offset}`);
+}
+
+export async function updateAlbum(albumId: string, data: UpdateAlbumRequest): Promise<Album> {
+	return apiRequest('PUT', `/albums/${albumId}`, data);
+}
+
+export async function addMediaToAlbum(albumId: string, media: { url: string; type: string }[]): Promise<SuccessResponse> {
+	return apiRequest('POST', `/albums/${albumId}/media`, { media });
+}
+
+export async function getAlbumMedia(albumId: string, limit: number = 20, page: number = 1, type?: string): Promise<{ media: any[]; total: number; page: number; limit: number }> {
+	const params = new URLSearchParams({ limit: String(limit), page: String(page) });
+	if (type) params.append('type', type);
+	return apiRequest('GET', `/albums/${albumId}/media?${params.toString()}`);
+}
+
+// Event Recommendations & Trending
+export interface EventRecommendation {
+	event_id: string;
+	score: number;
+	event?: Event;
+	friends_going: import('./types').User[];
+	friend_count: number;
+	reason: string;
+}
+
+export interface TrendingEvent {
+	event_id: string;
+	score: number;
+	event?: Event;
+}
+
+export async function getEventRecommendations(limit: number = 10): Promise<EventRecommendation[]> {
+	return apiRequest('GET', `/events/recommendations?limit=${limit}`);
+}
+
+export async function getTrendingEvents(limit: number = 10): Promise<TrendingEvent[]> {
+	return apiRequest('GET', `/events/trending?limit=${limit}`);
 }

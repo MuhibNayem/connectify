@@ -5,8 +5,9 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Button } from '$lib/components/ui/button';
 	import { CustomSelect } from '$lib/components/ui/custom-select';
-	import { X, Image as ImageIcon, Smile, MapPin, Tag, UserPlus } from '@lucide/svelte';
+	import { X, Image as ImageIcon, Smile, MapPin, Tag, UserPlus, Video } from '@lucide/svelte';
 	import UserMentionDropdown from './UserMentionDropdown.svelte';
+	import { auth } from '$lib/stores/auth.svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -20,26 +21,31 @@
 		id: string;
 		username: string;
 		avatar?: string;
+		first_name?: string;
+		full_name?: string;
 	};
 
-	export let communityId: string | undefined = undefined;
+	let { communityId = undefined } = $props<{ communityId?: string }>();
 
-	let postContent: string = '';
-	let mediaItems: MediaItem[] = [];
-	let privacy: 'PUBLIC' | 'FRIENDS' | 'ONLY_ME' = 'PUBLIC';
-	let submitting: boolean = false;
+	let postContent = $state('');
+	let mediaItems = $state<MediaItem[]>([]);
+	let privacy: 'PUBLIC' | 'FRIENDS' | 'ONLY_ME' = $state('PUBLIC');
+	let submitting = $state(false);
 	let fileInput: HTMLInputElement;
+	let isExpanded = $state(false);
 
 	// Rich Features State
-	let location: string = '';
-	let showLocationInput = false;
-	let showEmojiPicker = false;
-	let showUserTagger = false;
-	let taggedUsers: User[] = [];
-	let userSearchQuery = '';
+	let location = $state('');
+	let showLocationInput = $state(false);
+	let showEmojiPicker = $state(false);
+	let showUserTagger = $state(false);
+	let taggedUsers = $state<User[]>([]);
+	let userSearchQuery = $state('');
 
 	let emojiPickerContainer: HTMLElement;
 	let emojiToggleButton: HTMLElement;
+
+	// Computed or derived if needed (none really)
 
 	onMount(async () => {
 		if (typeof window !== 'undefined') {
@@ -132,8 +138,8 @@
 	}
 
 	// Inline Mention Logic
-	let showInlineMentions = false;
-	let mentionQuery = '';
+	let showInlineMentions = $state(false);
+	let mentionQuery = $state('');
 	let mentionStartPos = -1;
 
 	function handleTextareaInput(event: Event) {
@@ -172,6 +178,18 @@
 		showInlineMentions = false;
 	}
 
+	function resetForm() {
+		mediaItems.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+		postContent = '';
+		mediaItems = [];
+		location = '';
+		taggedUsers = [];
+		showLocationInput = false;
+		showUserTagger = false;
+		privacy = 'PUBLIC';
+		isExpanded = false;
+	}
+
 	async function handleSubmit() {
 		if (!postContent.trim() && mediaItems.length === 0) {
 			alert('Post content or media cannot be empty.');
@@ -201,15 +219,8 @@
 				newPost.comments = [];
 			}
 
-			mediaItems.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-
-			postContent = '';
-			mediaItems = [];
-			location = '';
-			taggedUsers = [];
-			showLocationInput = false;
-			privacy = 'PUBLIC';
 			dispatch('postCreated', newPost);
+			resetForm();
 		} catch (err: any) {
 			console.error('Create post error:', err);
 			alert(err.message || 'Failed to create post.');
@@ -221,149 +232,207 @@
 
 <svelte:window on:click={handleWindowClick} />
 
-<Card
-	class="relative w-full overflow-visible rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
->
-	<CardContent class="space-y-4 p-4">
-		<!-- Input Area -->
-		<div class="flex items-start space-x-3">
-			<div class="h-10 w-10 flex-shrink-0 rounded-full bg-gray-200 dark:bg-gray-700"></div>
-			<div class="flex-grow space-y-2">
-				<div class="relative">
-					<Textarea
-						placeholder="What's on your mind?"
-						bind:value={postContent}
-						oninput={handleTextareaInput}
-						onblur={() => setTimeout(() => (showInlineMentions = false), 150)}
-						rows={mediaItems.length > 0 ? 2 : 3}
-						class="w-full resize-none border-none bg-transparent p-0 text-lg placeholder:text-gray-500 focus-visible:ring-0"
-						disabled={submitting}
+<div class="glass-card bg-card mb-4 rounded-xl border border-white/5 px-4 pb-2 pt-4 shadow-sm">
+	{#if !isExpanded}
+		<!-- Collapsed State (Facebook Like) -->
+		<div class="mb-3 flex items-center gap-3">
+			<a href={`/profile/${auth.state.user?.id}`}>
+				{#if auth.state.user?.avatar}
+					<img
+						src={auth.state.user?.avatar}
+						alt="Avatar"
+						class="h-10 w-10 rounded-full object-cover"
 					/>
-					{#if showInlineMentions}
-						<div class="absolute left-0 top-full z-50 mt-1 w-full" style="max-width: 300px;">
-							<UserMentionDropdown
-								query={mentionQuery}
-								onSelection={handleInlineMentionSelection}
-							/>
-						</div>
-					{/if}
-					{#if showEmojiPicker}
-						<div
-							class="absolute right-0 top-full z-50 mt-2 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
-							bind:this={emojiPickerContainer}
-						>
-							<emoji-picker use:setupEmojiPicker class="light"></emoji-picker>
-						</div>
-					{/if}
-				</div>
-
-				<!-- Tagged Users & Location Display -->
-				{#if taggedUsers.length > 0 || location}
-					<div class="flex flex-wrap gap-2 text-sm text-gray-600 dark:text-gray-300">
-						{#if location}
-							<span class="flex items-center rounded-md bg-gray-100 px-2 py-1 dark:bg-gray-700">
-								<MapPin size={14} class="mr-1 text-red-500" />
-								{location}
-								<button onclick={() => (location = '')} class="ml-2 hover:text-red-500"
-									><X size={12} /></button
-								>
-							</span>
-						{/if}
-						{#each taggedUsers as user}
-							<span
-								class="flex items-center rounded-md bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-							>
-								<span class="mr-1">@</span>{user.username}
-								<button onclick={() => removeUserTag(user.id)} class="ml-2 hover:text-blue-500"
-									><X size={12} /></button
-								>
-							</span>
-						{/each}
-					</div>
+				{:else}
+					<div class="bg-secondary flex h-10 w-10 items-center justify-center rounded-full">👤</div>
 				{/if}
-			</div>
+			</a>
+			<button
+				class="bg-secondary/50 hover:bg-secondary/70 text-muted-foreground h-10 flex-grow rounded-full px-4 text-left transition-colors"
+				onclick={() => (isExpanded = true)}
+			>
+				What's on your mind, {(auth.state.user as any)?.first_name || auth.state.user?.username}?
+			</button>
 		</div>
 
-		<!-- Media Previews -->
-		{#if mediaItems.length > 0}
-			<div class="mt-4 overflow-x-auto pb-2">
-				<div class="flex w-max space-x-3">
-					{#each mediaItems as item, index}
-						<div
-							class="group relative aspect-square h-32 w-32 flex-shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-black shadow-sm md:h-40 md:w-40 dark:border-gray-700"
-						>
-							{#if item.type === 'image'}
-								<img src={item.previewUrl} alt="Preview" class="h-full w-full object-cover" />
-							{:else}
-								<video src={item.previewUrl} class="h-full w-full object-cover" controls></video>
-							{/if}
-							<button
-								onclick={() => removeMedia(index)}
-								class="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white opacity-0 transition-opacity hover:bg-black group-hover:opacity-100"
-							>
-								<X size={14} />
-							</button>
-						</div>
-					{/each}
-					{#if mediaItems.length < 10}
-						<button
-							class="flex h-32 w-32 flex-shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 text-gray-500 transition-colors hover:bg-gray-50 md:h-40 md:w-40 dark:border-gray-600 dark:hover:bg-gray-800/50"
-							onclick={() => fileInput.click()}
-						>
-							<ImageIcon size={24} class="mb-2 opacity-50" />
-							<span class="text-xs font-medium">Add Photos</span>
-						</button>
-					{/if}
-				</div>
-			</div>
-		{/if}
+		<hr class="my-2 border-white/10" />
 
-		<!-- Feature Inputs (Location / User Search) -->
-		{#if showLocationInput}
-			<div
-				class="animate-in fade-in slide-in-from-top-1 flex items-center space-x-2 rounded-lg bg-gray-50 p-2 dark:bg-gray-700/50"
+		<div class="flex items-center justify-between px-2">
+			<!-- Mock Live Video -->
+			<button
+				class="hover:bg-secondary/50 text-muted-foreground flex flex-1 items-center justify-center gap-2 rounded-lg p-2 font-medium transition-colors"
 			>
-				<MapPin size={18} class="text-red-500" />
-				<input
-					type="text"
-					placeholder="Where are you?"
-					bind:value={location}
-					class="w-full border-none bg-transparent text-sm focus:ring-0"
-					autoFocus
-				/>
-			</div>
-		{/if}
+				<Video size={24} class="text-red-500" />
+				<span>Live Video</span>
+			</button>
 
-		{#if showUserTagger}
-			<div
-				class="animate-in fade-in slide-in-from-top-1 relative rounded-lg bg-gray-50 p-2 dark:bg-gray-700/50"
+			<button
+				class="hover:bg-secondary/50 text-muted-foreground flex flex-1 items-center justify-center gap-2 rounded-lg p-2 font-medium transition-colors"
+				onclick={() => {
+					isExpanded = true;
+					setTimeout(() => fileInput.click(), 100);
+				}}
 			>
-				<div class="flex items-center space-x-2">
-					<UserPlus size={18} class="text-blue-500" />
-					<input
-						type="text"
-						placeholder="Search for friends to tag..."
-						bind:value={userSearchQuery}
-						class="w-full border-none bg-transparent text-sm focus:ring-0"
-						autoFocus
+				<ImageIcon size={24} class="text-green-500" />
+				<span>Photo/video</span>
+			</button>
+
+			<button
+				class="hover:bg-secondary/50 text-muted-foreground mobile-hidden flex flex-1 items-center justify-center gap-2 rounded-lg p-2 font-medium transition-colors"
+				onclick={() => {
+					isExpanded = true;
+					setTimeout(() => toggleEmojiPicker(), 100);
+				}}
+			>
+				<Smile size={24} class="text-yellow-500" />
+				<span>Feeling/activity</span>
+			</button>
+		</div>
+	{:else}
+		<!-- Expanded State -->
+		<div class="relative">
+			<!-- Header -->
+			<div class="mb-4 flex items-center justify-between border-b border-white/10 pb-2">
+				<h3 class="w-full text-center text-lg font-semibold">Create Post</h3>
+				<button
+					class="hover:bg-secondary/50 text-muted-foreground absolute right-0 top-0 rounded-full p-2"
+					onclick={resetForm}
+				>
+					<X size={20} />
+				</button>
+			</div>
+
+			<!-- User Info -->
+			<div class="mb-2 flex items-center gap-3">
+				{#if auth.state.user?.avatar}
+					<img
+						src={auth.state.user?.avatar}
+						alt="Avatar"
+						class="h-10 w-10 rounded-full object-cover"
 					/>
+				{:else}
+					<div class="bg-secondary flex h-10 w-10 items-center justify-center rounded-full">👤</div>
+				{/if}
+				<div>
+					<p class="font-semibold">
+						{(auth.state.user as any)?.full_name || auth.state.user?.username}
+					</p>
+					<!-- Privacy & Submit -->
+					<div class="flex items-center space-x-3">
+						<CustomSelect
+							bind:value={privacy}
+							options={[
+								{ value: 'PUBLIC', label: 'Public' },
+								{ value: 'FRIENDS', label: 'Friends' },
+								{ value: 'ONLY_ME', label: 'Only Me' }
+							]}
+							placeholder="Privacy"
+							disabled={submitting}
+							style="w-[90px]"
+							triggerClass="bg-secondary/40 hover:bg-secondary/60 h-6 px-2 rounded-md text-xs border-none"
+						/>
+					</div>
 				</div>
-				{#if userSearchQuery}
-					<div class="absolute left-0 top-full z-10 mt-1 w-full">
-						<UserMentionDropdown query={userSearchQuery} onSelection={addUserTag} />
+			</div>
+
+			<!-- Input -->
+			<div class="relative mb-2 min-h-[80px]">
+				<Textarea
+					placeholder={`What's on your mind, ${(auth.state.user as any)?.first_name || auth.state.user?.username}?`}
+					bind:value={postContent}
+					oninput={handleTextareaInput}
+					rows={3}
+					class="placeholder:text-muted-foreground/50 w-full resize-none border-none bg-transparent p-0 text-xl focus-visible:ring-0"
+					disabled={submitting}
+					autofocus
+				/>
+
+				<!-- Emoji Picker -->
+				{#if showEmojiPicker}
+					<div
+						class="glass-card absolute right-0 top-10 z-50 overflow-hidden rounded-lg border border-white/10"
+						bind:this={emojiPickerContainer}
+					>
+						<emoji-picker use:setupEmojiPicker class="light"></emoji-picker>
+					</div>
+				{/if}
+
+				<!-- Mentions -->
+				{#if showInlineMentions}
+					<div class="absolute left-0 top-full z-50 mt-1 w-full" style="max-width: 300px;">
+						<UserMentionDropdown query={mentionQuery} onSelection={handleInlineMentionSelection} />
 					</div>
 				{/if}
 			</div>
-		{/if}
 
-		<div
-			class="flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-700"
-		>
-			<!-- Add to Post Actions -->
-			<div class="flex items-center space-x-2">
-				<p class="mr-2 hidden text-sm font-semibold text-gray-900 sm:block dark:text-gray-200">
-					Add to your post
-				</p>
+			<!-- Media Previews (Reused) -->
+			{#if mediaItems.length > 0}
+				<div class="mb-4 overflow-x-auto rounded-lg border border-white/10 bg-black/20 p-2">
+					<div class="flex w-max space-x-3">
+						{#each mediaItems as item, index}
+							<div class="relative h-32 w-32 flex-shrink-0 overflow-hidden rounded-lg">
+								{#if item.type === 'image'}
+									<img src={item.previewUrl} alt="Preview" class="h-full w-full object-cover" />
+								{:else}
+									<video src={item.previewUrl} class="h-full w-full object-cover" controls></video>
+								{/if}
+								<button
+									onclick={() => removeMedia(index)}
+									class="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+								>
+									<X size={14} />
+								</button>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Feature Inputs (Location / User Search) -->
+			{#if showLocationInput}
+				<div
+					class="glass-panel animate-in fade-in slide-in-from-top-1 mb-2 flex items-center space-x-2 rounded-lg p-2"
+				>
+					<MapPin size={18} class="text-red-500" />
+					<input
+						type="text"
+						placeholder="Where are you?"
+						bind:value={location}
+						class="text-foreground w-full border-none bg-transparent text-sm focus:ring-0"
+						autofocus
+					/>
+					<button onclick={() => (showLocationInput = false)}><X size={16} /></button>
+				</div>
+			{/if}
+
+			{#if showUserTagger}
+				<div
+					class="glass-panel animate-in fade-in slide-in-from-top-1 relative mb-2 rounded-lg p-2"
+				>
+					<div class="flex items-center space-x-2">
+						<UserPlus size={18} class="text-blue-500" />
+						<input
+							type="text"
+							placeholder="Search for friends to tag..."
+							bind:value={userSearchQuery}
+							class="text-foreground w-full border-none bg-transparent text-sm focus:ring-0"
+							autofocus
+						/>
+						<button onclick={() => (showUserTagger = false)}><X size={16} /></button>
+					</div>
+					{#if userSearchQuery}
+						<div class="absolute left-0 top-full z-10 mt-1 w-full">
+							<UserMentionDropdown query={userSearchQuery} onSelection={addUserTag} />
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Add to Your Post -->
+			<div
+				class="bg-background/50 mb-4 flex items-center justify-between rounded-lg border border-white/10 p-3 shadow-sm"
+			>
+				<p class="text-foreground text-sm font-semibold">Add to your post</p>
 
 				<input
 					type="file"
@@ -374,65 +443,56 @@
 					onchange={handleFileSelect}
 				/>
 
-				<div class="flex items-center space-x-1">
+				<div class="flex items-center gap-1">
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-green-500 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20"
+						class="rounded-full text-green-400 transition-all hover:scale-110 hover:bg-green-500/10"
+						title="Photo/Video"
 						onclick={() => fileInput.click()}
 					>
-						<ImageIcon size={20} />
+						<ImageIcon size={22} />
 					</Button>
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20"
+						class="rounded-full text-blue-400 transition-all hover:scale-110 hover:bg-blue-500/10"
+						title="Tag Friends"
 						onclick={toggleUserTagger}
 					>
-						<Tag size={20} />
+						<Tag size={22} />
 					</Button>
 					<span bind:this={emojiToggleButton}>
 						<Button
 							variant="ghost"
 							size="icon"
-							class="rounded-full text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600 dark:hover:bg-yellow-900/20"
+							class="rounded-full text-yellow-400 transition-all hover:scale-110 hover:bg-yellow-500/10"
+							title="Feeling/Activity"
 							onclick={toggleEmojiPicker}
 						>
-							<Smile size={20} />
+							<Smile size={22} />
 						</Button>
 					</span>
 					<Button
 						variant="ghost"
 						size="icon"
-						class="rounded-full text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+						class="rounded-full text-red-400 transition-all hover:scale-110 hover:bg-red-500/10"
+						title="Check in"
 						onclick={toggleLocation}
 					>
-						<MapPin size={20} />
+						<MapPin size={22} />
 					</Button>
 				</div>
 			</div>
 
-			<!-- Privacy & Submit -->
-			<div class="flex items-center space-x-3">
-				<CustomSelect
-					bind:value={privacy}
-					options={[
-						{ value: 'PUBLIC', label: 'Public' },
-						{ value: 'FRIENDS', label: 'Friends' },
-						{ value: 'ONLY_ME', label: 'Only Me' }
-					]}
-					placeholder="Privacy"
-					disabled={submitting}
-					style="w-[110px]"
-				/>
-				<Button
-					onclick={handleSubmit}
-					disabled={submitting || (!postContent.trim() && mediaItems.length === 0)}
-					class="min-w-[80px]"
-				>
-					{submitting ? 'Posting...' : 'Post'}
-				</Button>
-			</div>
+			<!-- Submit Button -->
+			<Button
+				onclick={handleSubmit}
+				disabled={submitting || (!postContent.trim() && mediaItems.length === 0)}
+				class="mt-4 w-full font-semibold"
+			>
+				{submitting ? 'Posting...' : 'Post'}
+			</Button>
 		</div>
-	</CardContent>
-</Card>
+	{/if}
+</div>

@@ -5,72 +5,84 @@
 	import { auth } from '$lib/stores/auth.svelte';
 	import ReactionPicker from './ReactionPicker.svelte';
 
-	let { messageId, messageContent, messageSenderId, messageCreatedAt, onEdited, onDeleted } =
-		$props<{
-			messageId: string;
-			messageContent: string;
-			messageSenderId: string;
-			messageCreatedAt: string;
-			onEdited?: (newContent: string) => void;
-			onDeleted?: () => void;
-		}>();
+let {
+	messageId,
+	messageContent,
+	messageSenderId,
+	messageCreatedAt,
+	conversationId,
+	conversationKey = '',
+	onEdited,
+	onDeleted
+} = $props<{
+	messageId: string;
+	messageContent: string;
+	messageSenderId: string;
+	messageCreatedAt: string;
+	conversationId: string;
+	conversationKey?: string;
+	onEdited?: (newContent: string) => void;
+	onDeleted?: () => void;
+}>();
 
 	const dispatch = createEventDispatcher();
 
 	let showMenu = $state(false);
 	let showReactionPicker = $state(false);
 	let isEditing = $state(false);
-	let editContent = $state(messageContent);
+	let editContent = $state('');
 	let isDeleting = $state(false);
 
-	const isMe = auth.state.user?.id === messageSenderId;
+	let isMe = $derived(auth.user?.id === messageSenderId);
 
-	// Calculate if actions are available based on time restrictions
-	const createdTime = $derived(new Date(messageCreatedAt).getTime());
-	const canEdit = $derived(() => {
-		const oneHourAgo = Date.now() - 60 * 60 * 1000;
-		return isMe && createdTime > oneHourAgo;
-	});
+	function canEdit() {
+		if (!isMe) return false;
+		const created = new Date(messageCreatedAt);
+		const now = new Date();
+		const diff = (now.getTime() - created.getTime()) / 1000 / 60; // minutes
+		return diff < 60;
+	}
 
-	const canDelete = $derived(() => {
-		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-		return isMe && createdTime > sevenDaysAgo;
-	});
+	function canDelete() {
+		if (!isMe) return false;
+		const created = new Date(messageCreatedAt);
+		const now = new Date();
+		const diff = (now.getTime() - created.getTime()) / 1000 / 60 / 60 / 24; // days
+		return diff < 7;
+	}
 
 	function toggleMenu() {
 		showMenu = !showMenu;
+		showReactionPicker = false;
 	}
 
 	function startEdit() {
-		if (!canEdit()) {
-			alert('Messages can only be edited within 1 hour of sending');
-			return;
-		}
-		isEditing = true;
 		editContent = messageContent;
+		isEditing = true;
 		showMenu = false;
-	}
-
-	async function saveEdit() {
-		if (!editContent.trim()) {
-			alert('Message cannot be empty');
-			return;
-		}
-		try {
-			const updated = await editMessage(messageId, editContent);
-			isEditing = false;
-			if (onEdited) {
-				onEdited(editContent);
-			}
-			dispatch('edited', { content: editContent });
-		} catch (error: any) {
-			alert(error.message || 'Failed to edit message');
-		}
 	}
 
 	function cancelEdit() {
 		isEditing = false;
-		editContent = messageContent;
+		editContent = '';
+	}
+
+	async function saveEdit() {
+		if (editContent.trim() === messageContent) {
+			cancelEdit();
+			return;
+		}
+
+		try {
+			const targetConversation = conversationKey || conversationId;
+			await editMessage(messageId, editContent, targetConversation);
+			if (onEdited) {
+				onEdited(editContent);
+			}
+			isEditing = false;
+		} catch (error: any) {
+			alert(error.message || 'Failed to update message');
+		}
 	}
 
 	async function handleDelete() {
@@ -85,7 +97,8 @@
 
 		isDeleting = true;
 		try {
-			await deleteMessage(messageId);
+			const targetConversation = conversationKey || conversationId;
+			await deleteMessage(messageId, targetConversation);
 			if (onDeleted) {
 				onDeleted();
 			}

@@ -1,37 +1,71 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { getFriendships, type PopulatedFriendship, type FriendshipStatus } from '$lib/api';
+	import { page } from '$app/stores';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { presenceStore, type PresenceState } from '$lib/stores/presence';
 	import { Avatar, AvatarFallback, AvatarImage } from '$lib/components/ui/avatar';
+	import {
+		Users,
+		Globe,
+		Calendar,
+		ShoppingBag,
+		Settings,
+		Bookmark,
+		Clock,
+		ChevronDown,
+		MonitorPlay
+	} from '@lucide/svelte';
 
-	let friends = $state<PopulatedFriendship[]>([]);
-	let isLoading = $state(true);
-	let error = $state<string | null>(null);
-	let presenceState = $state<PresenceState>({});
+	let currentUser = $derived(auth.state.user);
 
-	const currentUser = auth.state.user;
-
-	presenceStore.subscribe((value) => {
-		presenceState = value;
-	});
-
-	onMount(async () => {
-		if (!currentUser) {
-			error = 'User not authenticated.';
-			isLoading = false;
-			return;
+	// Facebook-style Left Sidebar Items
+	const mainNavItems = [
+		{
+			href: '/friends',
+			label: 'Friends',
+			icon: Users,
+			color: 'text-blue-500',
+			bg: 'bg-transparent'
+		}, // FB uses specific icons, we'll simulate
+		{
+			href: '/communities',
+			label: 'Communities',
+			icon: Users,
+			color: 'text-white',
+			bg: 'bg-blue-500'
+		}, // Groups often circular blue
+		{
+			href: '/marketplace',
+			label: 'Marketplace',
+			icon: ShoppingBag,
+			color: 'text-white',
+			bg: 'bg-blue-500'
+		},
+		{ href: '/events', label: 'Events', icon: Calendar, color: 'text-white', bg: 'bg-red-500' },
+		{ href: '/memories', label: 'Memories', icon: Clock, color: 'text-white', bg: 'bg-blue-400' },
+		{ href: '/saved', label: 'Saved', icon: Bookmark, color: 'text-white', bg: 'bg-purple-500' },
+		{ href: '/video', label: 'Video', icon: MonitorPlay, color: 'text-white', bg: 'bg-blue-500' },
+		{
+			href: '/settings',
+			label: 'Settings',
+			icon: Settings,
+			color: 'text-foreground',
+			bg: 'bg-secondary'
 		}
+	];
 
-		try {
-			const response = await getFriendships('accepted');
-			friends = response.data;
-		} catch (e: any) {
-			error = e.message || 'Failed to load friends.';
-		} finally {
-			isLoading = false;
+	// Mock Shortcuts
+	const shortcuts = [
+		{ id: 1, name: 'Svelte Developers', image: 'https://github.com/sveltejs.png' },
+		{ id: 2, name: 'Tailwind CSS', image: 'https://github.com/tailwindlabs.png' },
+		{
+			id: 3,
+			name: 'Web Design Trends',
+			image: 'https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=50&h=50&fit=crop'
 		}
-	});
+	];
+
+	function isActive(path: string) {
+		return $page.url.pathname === path;
+	}
 </script>
 
 <div class="space-y-4">
@@ -39,97 +73,81 @@
 	{#if currentUser}
 		<a
 			href={`/profile/${currentUser.id}`}
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
+			class="flex items-center space-x-3 rounded-lg border-transparent p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10"
 		>
-			<Avatar class="h-8 w-8">
+			<Avatar class="h-9 w-9 border border-black/10">
 				<AvatarImage src={currentUser.avatar} alt={currentUser.username} />
 				<AvatarFallback>{currentUser.username.charAt(0).toUpperCase()}</AvatarFallback>
 			</Avatar>
-			<span class="font-medium text-gray-800">{currentUser.full_name || currentUser.username}</span>
+			<span class="text-foreground font-semibold"
+				>{currentUser.full_name || currentUser.username}</span
+			>
 		</a>
 	{/if}
 
 	<!-- Main Navigation Links -->
 	<nav class="space-y-1">
-		<a
-			href="/friends"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
+		{#each mainNavItems as item}
+			<a
+				href={item.href}
+				class="group flex items-center space-x-3 rounded-lg p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10 {isActive(
+					item.href
+				)
+					? 'bg-black/5 dark:bg-white/10'
+					: ''}"
+			>
+				{#if item.label === 'Friends'}
+					<!-- Special style for Friends roughly matching generic icon if needed, or consistent circle -->
+					<div class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500 text-white">
+						<svelte:component this={item.icon} size={20} />
+					</div>
+				{:else if item.bg !== 'bg-transparent'}
+					<div
+						class={`flex h-9 w-9 items-center justify-center rounded-full ${item.bg} ${item.color}`}
+					>
+						<svelte:component this={item.icon} size={20} />
+					</div>
+				{:else}
+					<div
+						class="bg-secondary text-foreground flex h-9 w-9 items-center justify-center rounded-full"
+					>
+						<svelte:component this={item.icon} size={20} />
+					</div>
+				{/if}
+				<span class="text-foreground/90 font-medium">{item.label}</span>
+			</a>
+		{/each}
+
+		<button
+			class="flex w-full items-center space-x-3 rounded-lg p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10"
 		>
-			<!-- <Users size={20} /> -->
-			<span class="text-xl">👥</span>
-			<span class="text-gray-700">Friends</span>
-		</a>
-		<a
-			href="/communities"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<span class="text-xl">🌍</span>
-			<span class="text-gray-700">Communities</span>
-		</a>
-		<a
-			href="/events"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<!-- <Calendar size={20} /> -->
-			<span class="text-xl">🗓️</span>
-			<span class="text-gray-700">Events</span>
-		</a>
-		<a
-			href="/marketplace"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<!-- <ShoppingBag size={20} /> -->
-			<span class="text-xl">🛍️</span>
-			<span class="text-gray-700">Marketplace</span>
-		</a>
-		<a
-			href="/settings"
-			class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-		>
-			<span class="text-xl">⚙️</span>
-			<span class="text-gray-700">Settings</span>
-		</a>
+			<div class="bg-secondary flex h-9 w-9 items-center justify-center rounded-full">
+				<ChevronDown size={20} />
+			</div>
+			<span class="text-foreground/90 font-medium">See more</span>
+		</button>
 	</nav>
 
 	<!-- Separator -->
-	<hr class="border-gray-200" />
+	<hr class="border-border/50 mx-2" />
 
-	<!-- Friends List -->
+	<!-- Shortcuts -->
 	<div class="space-y-1">
-		<h3 class="px-2 text-xs font-semibold uppercase text-gray-500">Friends</h3>
-		{#if isLoading}
-			<p class="p-2 text-gray-500">Loading friends...</p>
-		{:else if error}
-			<p class="p-2 text-red-500">{error}</p>
-		{:else if friends.length === 0}
-			<p class="p-2 text-gray-500">No friends to show.</p>
-		{:else}
-			<ul class="space-y-1">
-				{#each friends as friend (friend.id)}
-					{@const friendUser =
-						friend.receiver_id === currentUser?.id ? friend.requester_info : friend.receiver_info}
-					{@const isOnline = presenceState[friendUser.id]?.status === 'online'}
-					<li>
-						<a
-							href={`/profile/${friendUser.id}`}
-							class="flex items-center space-x-3 rounded-lg p-2 transition-colors hover:bg-gray-100"
-						>
-							<div class="relative">
-								<Avatar class="h-8 w-8">
-									<AvatarImage src={friendUser.avatar} alt={friendUser.username} />
-									<AvatarFallback>{friendUser.username.charAt(0).toUpperCase()}</AvatarFallback>
-								</Avatar>
-								{#if isOnline}
-									<span
-										class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500"
-									></span>
-								{/if}
-							</div>
-							<span class="text-gray-700">{friendUser.full_name || friendUser.username}</span>
-						</a>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+		<div class="flex items-center justify-between px-2 py-1">
+			<h3 class="text-muted-foreground text-sm font-semibold">Your shortcuts</h3>
+			<button
+				class="text-xs text-blue-500 opacity-0 transition-opacity hover:underline group-hover:opacity-100"
+				>Edit</button
+			>
+		</div>
+		{#each shortcuts as shortcut}
+			<a
+				href={`/communities/${shortcut.id}`}
+				class="flex items-center space-x-3 rounded-lg p-2 transition-all hover:bg-black/5 dark:hover:bg-white/10"
+			>
+				<img src={shortcut.image} alt={shortcut.name} class="h-9 w-9 rounded-lg object-cover" />
+				<span class="text-foreground/90 font-medium">{shortcut.name}</span>
+			</a>
+		{/each}
 	</div>
 </div>

@@ -5,7 +5,7 @@
 	import { Camera } from '@lucide/svelte';
 
 	export let showModal: boolean;
-	export let onGroupCreated: () => void;
+	export let onGroupCreated: (group: any) => void;
 
 	let groupName = '';
 	let selectedParticipants: string[] = [];
@@ -92,13 +92,14 @@
 				? [...new Set([...selectedParticipants, auth.state.user.id])]
 				: selectedParticipants;
 
-			await createGroup({
+			const result = await createGroup({
 				name: groupName,
 				member_ids: allParticipants,
 				avatar: avatarUrl
 			});
 
-			onGroupCreated();
+			// Optimistic update: pass group data to callback
+			onGroupCreated(result);
 			showModal = false;
 		} catch (e: any) {
 			error = e.message || 'Failed to create group.';

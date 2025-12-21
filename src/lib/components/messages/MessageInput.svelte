@@ -5,18 +5,25 @@
 	import { scale, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 
-	export let onSendMessage: (content: string, files: File[]) => Promise<void>;
-	export let conversationId: string;
+	// Export value for binding
+	export let value = '';
+
+	export let onSend: (content: string, files: File[]) => Promise<void>;
+	export let onTyping: (() => void) | undefined = undefined; // Add onTyping support if needed
+	export let conversationId: string = ''; // make optional or default
 
 	onMount(async () => {
 		await import('emoji-picker-element');
 	});
 
-	let content = '';
 	let isSending = false;
+	// Use exported value as local content
+	$: content = value; // one way sync
+
 	let files: File[] = [];
 	let showEmojiPicker = false;
 	let fileInput: HTMLInputElement;
+	let textareaRef: HTMLTextAreaElement;
 
 	// Mentions logic
 	let showMentions = false;
@@ -34,11 +41,21 @@
 
 	// Typing indicator logic
 	let typingTimer: any;
+	export let isMarketplace: boolean = false; // Add marketplace flag for typing context
+
 	function handleTyping() {
 		clearTimeout(typingTimer);
-		sendWebSocketMessage('typing', { isTyping: true, conversation_id: conversationId });
+		sendWebSocketMessage('typing', {
+			isTyping: true,
+			conversation_id: conversationId,
+			is_marketplace: isMarketplace
+		});
 		typingTimer = setTimeout(() => {
-			sendWebSocketMessage('typing', { isTyping: false, conversation_id: conversationId });
+			sendWebSocketMessage('typing', {
+				isTyping: false,
+				conversation_id: conversationId,
+				is_marketplace: isMarketplace
+			});
 		}, 2000); // Consider user as "stopped typing" after 2 seconds
 
 		checkForMentions();
@@ -94,10 +111,11 @@
 	function selectMention(member: any) {
 		if (mentionCursorPos === -1) return;
 
-		const beforeMention = content.slice(0, mentionCursorPos);
-		const afterMention = content.slice(mentionCursorPos + mentionQuery.length + 1);
+		const beforeMention = value.slice(0, mentionCursorPos);
+		const afterMention = value.slice(mentionCursorPos + mentionQuery.length + 1);
 
-		content = `${beforeMention}@${member.username} ${afterMention}`;
+		value = `${beforeMention}@${member.username} ${afterMention}`;
+		content = value;
 		showMentions = false;
 
 		// Reset cursor position (optional, but good UX)
@@ -134,18 +152,23 @@
 	}
 
 	async function handleSubmit() {
-		if ((!content.trim() && files.length === 0) || isSending) return;
+		if ((!value.trim() && files.length === 0) || isSending) return;
 
 		isSending = true;
 		try {
-			await onSendMessage(content, files);
-			content = ''; // Clear input on successful send
+			await onSend(value, files);
+			value = ''; // Clear bound value
+			content = '';
 			files = [];
 			if (fileInput) fileInput.value = '';
+			// Re-focus the input after send
+			if (textareaRef) textareaRef.focus();
 		} catch (error) {
 			console.error('Failed to send message:', error);
 		} finally {
 			isSending = false;
+			// Also focus on error case
+			if (textareaRef) textareaRef.focus();
 		}
 	}
 
@@ -157,7 +180,8 @@
 	}
 
 	function addEmoji(event: any) {
-		content += event.detail.unicode;
+		value += event.detail.unicode;
+		content = value;
 		showEmojiPicker = false;
 	}
 
@@ -346,7 +370,8 @@
 			</button>
 
 			<textarea
-				bind:value={content}
+				bind:this={textareaRef}
+				bind:value
 				disabled={isSending}
 				on:input={handleTyping}
 				on:keydown={handleKeydown}
@@ -357,7 +382,7 @@
 
 			<button
 				type="submit"
-				disabled={isSending || (!content.trim() && files.length === 0)}
+				disabled={isSending || (!value.trim() && files.length === 0)}
 				class="inline-flex cursor-pointer justify-center rounded-full p-2 text-blue-600 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-500 dark:hover:bg-gray-600"
 			>
 				<svg class="h-6 w-6 rotate-90" fill="currentColor" viewBox="0 0 20 20">

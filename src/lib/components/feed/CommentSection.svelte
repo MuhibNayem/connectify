@@ -108,7 +108,7 @@
 	});
 </script>
 
-<div class="mt-3 border-t border-gray-200 pt-3">
+<div class="mt-3 border-t border-white/10 pt-3">
 	<!-- Form to add a new comment -->
 	<div class="relative">
 		<div class="flex items-start space-x-2">
@@ -122,7 +122,7 @@
 					bind:value={newCommentContent}
 					oninput={handleInput}
 					onblur={() => setTimeout(() => (showMentions = false), 150)}
-					class="block w-full rounded-2xl border-transparent bg-gray-100 px-4 py-2 text-sm focus:border-transparent focus:ring-0"
+					class="text-foreground placeholder:text-muted-foreground block w-full rounded-2xl border-none bg-black/5 px-4 py-2 text-sm focus:ring-0"
 					placeholder="Write a comment..."
 					onkeydown={(e) => {
 						if (e.key === 'Enter' && !e.shiftKey && !showMentions) {
@@ -132,7 +132,7 @@
 					}}
 				></textarea>
 				{#if showMentions}
-					<div class="absolute bottom-full z-10 mb-1 mt-1 w-full">
+					<div class="glass-card absolute bottom-full z-10 mb-1 mt-1 w-full">
 						<UserMentionDropdown query={mentionQuery} onSelection={handleMentionSelection} />
 					</div>
 				{/if}

@@ -1,167 +1,224 @@
 <script lang="ts">
-    import { apiRequest } from '$lib/api';
-    import { auth } from '$lib/stores/auth.svelte';
-    import { onMount } from 'svelte';
-    import { Button } from '$lib/components/ui/button';
+	import { apiRequest } from '$lib/api';
+	import { auth } from '$lib/stores/auth.svelte';
+	import { onMount } from 'svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { UserPlus, UserX } from '@lucide/svelte';
 
-    interface FriendRequest {
-        id: string; // Friendship ID
-        requester_id: string;
-        receiver_id: string;
-        status: 'pending' | 'accepted' | 'rejected';
-        requester_username?: string;
-        receiver_username?: string;
-        requester_avatar?: string;
-        receiver_avatar?: string;
-    }
+	let { limit = undefined } = $props();
 
-    interface UserDetails {
-        id: string;
-        username: string;
-        avatar?: string;
-    }
+	interface FriendRequest {
+		id: string;
+		requester_id: string;
+		receiver_id: string;
+		status: 'pending' | 'accepted' | 'rejected';
+		requester_username?: string;
+		receiver_username?: string;
+		requester_avatar?: string;
+		receiver_avatar?: string;
+	}
 
-    let incomingRequests: FriendRequest[] = [];
-    let outgoingRequests: FriendRequest[] = [];
-    let loading = true;
-    let error: string | null = null;
+	interface UserDetails {
+		id: string;
+		username: string;
+		avatar?: string;
+	}
 
-    $: currentUserId = auth.state.user?.id;
+	let incomingRequests = $state<FriendRequest[]>([]);
+	let outgoingRequests = $state<FriendRequest[]>([]);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
 
-    onMount(async () => {
-        if (!currentUserId) {
-            error = "User not authenticated.";
-            loading = false;
-            return;
-        }
-        await fetchRequests();
-    });
+	let currentUserId = $derived(auth.state.user?.id);
 
-    async function fetchRequests() {
-        loading = true;
-        error = null;
-        try {
-            const response = await apiRequest('GET', '/friendships?status=pending', undefined, true);
-            const allPendingRequests: FriendRequest[] = response.data ?? [];
+	// Derived filtered lists based on limit
+	let displayedIncoming = $derived(limit ? incomingRequests.slice(0, limit) : incomingRequests);
+	let displayedOutgoing = $derived(limit ? outgoingRequests.slice(0, limit) : outgoingRequests);
 
-            const fetchedIncoming: FriendRequest[] = [];
-            const fetchedOutgoing: FriendRequest[] = [];
+	onMount(async () => {
+		if (!currentUserId) {
+			error = 'User not authenticated.';
+			loading = false;
+			return;
+		}
+		await fetchRequests();
+	});
 
-            for (const req of allPendingRequests) {
-                if (req.receiver_id === currentUserId) {
-                    // Incoming request
-                    const requesterDetails: UserDetails = await apiRequest('GET', `/users/${req.requester_id}`, undefined, true);
-                    fetchedIncoming.push({
-                        ...req,
-                        requester_username: requesterDetails.username,
-                        requester_avatar: requesterDetails.avatar,
-                    });
-                } else if (req.requester_id === currentUserId) {
-                    // Outgoing request
-                    const receiverDetails: UserDetails = await apiRequest('GET', `/users/${req.receiver_id}`, undefined, true);
-                    fetchedOutgoing.push({
-                        ...req,
-                        receiver_username: receiverDetails.username,
-                        receiver_avatar: receiverDetails.avatar,
-                    });
-                }
-            }
+	async function fetchRequests() {
+		loading = true;
+		error = null;
+		try {
+			const response = await apiRequest('GET', '/friendships?status=pending', undefined, true);
+			const allPendingRequests: FriendRequest[] = response.data ?? [];
 
-            incomingRequests = fetchedIncoming;
-            outgoingRequests = fetchedOutgoing;
+			const fetchedIncoming: FriendRequest[] = [];
+			const fetchedOutgoing: FriendRequest[] = [];
 
-        } catch (e: any) {
-            error = e.message || 'Failed to load friend requests.';
-            console.error(e);
-        } finally {
-            loading = false;
-        }
-    }
+			for (const req of allPendingRequests) {
+				if (req.receiver_id === currentUserId) {
+					const requesterDetails: UserDetails = await apiRequest(
+						'GET',
+						`/users/${req.requester_id}`,
+						undefined,
+						true
+					);
+					fetchedIncoming.push({
+						...req,
+						requester_username: requesterDetails.username,
+						requester_avatar: requesterDetails.avatar
+					});
+				} else if (req.requester_id === currentUserId) {
+					const receiverDetails: UserDetails = await apiRequest(
+						'GET',
+						`/users/${req.receiver_id}`,
+						undefined,
+						true
+					);
+					fetchedOutgoing.push({
+						...req,
+						receiver_username: receiverDetails.username,
+						receiver_avatar: receiverDetails.avatar
+					});
+				}
+			}
 
-    async function handleRespondToRequest(requestId: string, accept: boolean) {
-        try {
-            await apiRequest('POST', `/friendships/requests/${requestId}/respond`, { friendship_id: requestId, accept }, true);
-            alert(`Request ${accept ? 'accepted' : 'rejected'} successfully!`);
-            await fetchRequests(); // Refresh lists
-        } catch (e: any) {
-            alert(`Failed to respond to request: ${e.message}`);
-            console.error(e);
-        }
-    }
+			incomingRequests = fetchedIncoming;
+			outgoingRequests = fetchedOutgoing;
+		} catch (e: any) {
+			error = e.message || 'Failed to load friend requests.';
+			console.error(e);
+		} finally {
+			loading = false;
+		}
+	}
 
-    async function handleCancelRequest(requestId: string) {
-        if (confirm('Are you sure you want to cancel this request?')) {
-            try {
-                await apiRequest('DELETE', `/friendships/${requestId}`, undefined, true);
-                alert('Request cancelled successfully!');
-                await fetchRequests(); // Refresh lists
-            } catch (e: any) {
-                alert(`Failed to cancel request: ${e.message}`);
-                console.error(e);
-            }
-        }
-    }
+	async function handleRespondToRequest(requestId: string, accept: boolean) {
+		try {
+			await apiRequest(
+				'POST',
+				`/friendships/requests/${requestId}/respond`,
+				{ friendship_id: requestId, accept },
+				true
+			);
+			// Optimistic update
+			incomingRequests = incomingRequests.filter((r) => r.id !== requestId);
+			// await fetchRequests(); // Refreshing full list might be overkill if we just remove it
+		} catch (e: any) {
+			alert(`Failed to respond to request: ${e.message}`);
+			console.error(e);
+		}
+	}
+
+	async function handleCancelRequest(requestId: string) {
+		if (confirm('Are you sure you want to cancel this request?')) {
+			try {
+				await apiRequest('DELETE', `/friendships/${requestId}`, undefined, true);
+				outgoingRequests = outgoingRequests.filter((r) => r.id !== requestId);
+			} catch (e: any) {
+				alert(`Failed to cancel request: ${e.message}`);
+				console.error(e);
+			}
+		}
+	}
 </script>
 
-<div class="space-y-6">
-    {#if loading}
-        <p class="text-center text-gray-600">Loading requests...</p>
-    {:else if error}
-        <p class="text-center text-red-600">Error: {error}</p>
-    {:else}
-        <!-- Incoming Requests -->
-        <div>
-            <h3 class="text-lg font-semibold text-gray-800 mb-3">Incoming Requests ({incomingRequests.length})</h3>
-            {#if incomingRequests.length === 0}
-                <p class="text-gray-600">No new incoming friend requests.</p>
-            {:else}
-                <ul class="space-y-3">
-                    {#each incomingRequests as request (request.id)}
-                        <li class="flex items-center justify-between p-3 bg-gray-50 rounded-lg shadow-sm">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-10 h-10 rounded-full bg-purple-200 flex items-center justify-center text-purple-700 font-bold">
-                                    {#if request.requester_avatar}
-                                        <img src={request.requester_avatar} alt={request.requester_username} class="w-full h-full rounded-full object-cover" />
-                                    {:else}
-                                        {request.requester_username?.substring(0, 2).toUpperCase()}
-                                    {/if}
-                                </div>
-                                <span class="font-medium text-gray-800">{request.requester_username}</span>
-                            </div>
-                            <div class="flex space-x-2">
-                                <Button variant="default" size="sm" onclick={() => handleRespondToRequest(request.id, true)}>Accept</Button>
-                                <Button variant="outline" size="sm" onclick={() => handleRespondToRequest(request.id, false)}>Reject</Button>
-                            </div>
-                        </li>
-                    {/each}
-                </ul>
-            {/if}
-        </div>
+<div class="space-y-8">
+	{#if loading}
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+			{#each Array(limit || 4) as _}
+				<div class="glass-card h-64 animate-pulse rounded-xl"></div>
+			{/each}
+		</div>
+	{:else if error}
+		<div class="glass-panel p-4 text-center text-red-500">{error}</div>
+	{:else}
+		<!-- Incoming Requests -->
+		{#if displayedIncoming.length > 0}
+			<div>
+				{#if !limit}<h3 class="mb-4 text-xl font-bold">Friend Requests</h3>{/if}
+				<div
+					class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+				>
+					{#each displayedIncoming as request (request.id)}
+						<div class="glass-card group flex flex-col overflow-hidden rounded-xl">
+							<!-- Top Image Area (Placeholder pattern or avatar cover) -->
+							<div class="from-primary/20 relative h-32 bg-gradient-to-br to-purple-500/20">
+								{#if request.requester_avatar}
+									<img
+										src={request.requester_avatar}
+										alt={request.requester_username}
+										class="h-full w-full object-cover opacity-80"
+									/>
+								{:else}
+									<div class="flex h-full w-full items-center justify-center">
+										<UserPlus size={48} class="text-white/20" />
+									</div>
+								{/if}
+							</div>
 
-        <!-- Outgoing Requests -->
-        <div class="mt-6">
-            <h3 class="text-lg font-semibold text-gray-800 mb-3">Outgoing Requests ({outgoingRequests.length})</h3>
-            {#if outgoingRequests.length === 0}
-                <p class="text-gray-600">No pending outgoing friend requests.</p>
-            {:else}
-                <ul class="space-y-3">
-                    {#each outgoingRequests as request (request.id)}
-                        <li class="flex items-center justify-between p-3 bg-gray-50 rounded-lg shadow-sm">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-10 h-10 rounded-full bg-orange-200 flex items-center justify-center text-orange-700 font-bold">
-                                    {#if request.receiver_avatar}
-                                        <img src={request.receiver_avatar} alt={request.receiver_username} class="w-full h-full rounded-full object-cover" />
-                                    {:else}
-                                        {request.receiver_username?.substring(0, 2).toUpperCase()}
-                                    {/if}
-                                </div>
-                                <span class="font-medium text-gray-800">{request.receiver_username}</span>
-                            </div>
-                            <Button variant="outline" size="sm" onclick={() => handleCancelRequest(request.id)}>Cancel Request</Button>
-                        </li>
-                    {/each}
-                </ul>
-            {/if}
-        </div>
-    {/if}
+							<!-- Content -->
+							<div class="flex flex-1 flex-col p-3">
+								<h4 class="mb-1 truncate text-lg font-bold">{request.requester_username}</h4>
+								<p class="text-muted-foreground mb-4 text-xs">12 mutual friends</p>
+								<!-- Mock mutuals -->
+
+								<div class="mt-auto space-y-2">
+									<Button class="w-full" onclick={() => handleRespondToRequest(request.id, true)}
+										>Confirm</Button
+									>
+									<Button
+										variant="ghost"
+										class="w-full bg-white/5 hover:bg-white/10"
+										onclick={() => handleRespondToRequest(request.id, false)}>Delete</Button
+									>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if displayedIncoming.length === 0 && !loading && !displayedOutgoing.length}
+			<div class="py-10 text-center opacity-60">
+				<p>No new friend requests.</p>
+			</div>
+		{/if}
+
+		<!-- Outgoing Requests (Only show if not limited or separate section?) -->
+		{#if !limit && displayedOutgoing.length > 0}
+			<div class="mt-8">
+				<h3 class="mb-4 text-xl font-bold">Sent Requests</h3>
+				<div
+					class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+				>
+					{#each displayedOutgoing as request (request.id)}
+						<div class="glass-card flex flex-col overflow-hidden rounded-xl">
+							<div class="relative h-32 bg-gradient-to-br from-orange-400/20 to-red-500/20">
+								{#if request.receiver_avatar}
+									<img
+										src={request.receiver_avatar}
+										alt={request.receiver_username}
+										class="h-full w-full object-cover opacity-80"
+									/>
+								{:else}
+									<div class="flex h-full w-full items-center justify-center">
+										<UserPlus size={48} class="text-white/20" />
+									</div>
+								{/if}
+							</div>
+							<div class="flex flex-1 flex-col p-3">
+								<h4 class="mb-1 truncate text-lg font-bold">{request.receiver_username}</h4>
+								<Button
+									variant="secondary"
+									class="mt-auto w-full"
+									onclick={() => handleCancelRequest(request.id)}>Cancel Request</Button
+								>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+	{/if}
 </div>
